@@ -1,0 +1,7 @@
+{
+  "name": "AI BNB Host",
+  "description": "AI-native host dashboard for short-term rentals in India. Manage listings, pricing, meals, and calendar with a conversational AI assistant.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
