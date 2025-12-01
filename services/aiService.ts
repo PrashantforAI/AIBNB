@@ -1,5 +1,7 @@
+
 import { GoogleGenAI, Chat, GenerativeModel } from "@google/genai";
-import { AI_SYSTEM_INSTRUCTION } from '../constants';
+import { AI_SYSTEM_INSTRUCTION, AI_MESSAGE_REGULATOR_INSTRUCTION } from '../constants';
+import { AIAction } from '../types';
 
 // Helper to safely access env vars in browser without crashing if process is undefined
 const getEnvVar = (key: string) => {
@@ -95,4 +97,40 @@ export const suggestPricing = async (location: string, type: string): Promise<st
         console.error("GenAI Error", e);
         return "{}";
     }
+};
+
+export const moderateMessage = async (message: string): Promise<{ safe: boolean; reason: string }> => {
+    const ai = getClient();
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: message,
+            config: {
+                systemInstruction: AI_MESSAGE_REGULATOR_INSTRUCTION,
+                responseMimeType: 'application/json'
+            }
+        });
+        const text = response.text;
+        if (!text) return { safe: false, reason: "AI Check Failed" };
+        
+        return JSON.parse(text);
+    } catch (e) {
+        console.error("Moderation Error", e);
+        // Fail safe: block if error to prevent leakage
+        return { safe: false, reason: "Unable to verify message safety at this time." };
+    }
+};
+
+export const parseAIResponse = (response: string): { text: string, actions: AIAction[] } => {
+    const actions: AIAction[] = [];
+    const text = response.replace(/\[ACTION: (.+?)\]/g, (match, json) => {
+        try {
+            actions.push(JSON.parse(json));
+            return ''; // Remove action tag from text
+        } catch (e) {
+            console.error("Failed to parse AI action", e);
+            return match; // Keep if failed
+        }
+    });
+    return { text: text.trim(), actions };
 };

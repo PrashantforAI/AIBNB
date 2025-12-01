@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Property, Booking, SearchCriteria } from '../types';
-import { Calendar, Search, Heart, MessageSquare, Plus, Minus, X, MapPin } from 'lucide-react';
+
+import React, { useState } from 'react';
+import { Property, Booking, SearchCriteria, AIAction } from '../types';
+import { Compass, Calendar, Heart, Search, Sparkles, MapPin, Users, Star, ArrowRight, Waves, Tractor, Crown, Mountain, Home } from 'lucide-react';
 import { fetchGuestBookings } from '../services/bookingService';
+import { AIChat } from '../components/AIChat';
 import { CalendarPopup } from '../components/CalendarPopup';
 
 interface GuestDashboardProps {
@@ -10,139 +12,123 @@ interface GuestDashboardProps {
   onPreview: (property: Property) => void;
   searchCriteria: SearchCriteria;
   setSearchCriteria: (c: SearchCriteria) => void;
+  context?: string;
+  systemInstruction?: string;
+  onBook?: (booking: any) => Promise<void>;
+  onAction?: (action: AIAction) => void;
 }
 
 export const GuestDashboard: React.FC<GuestDashboardProps> = ({ 
     properties, 
-    onNavigate, 
-    onPreview, 
-    searchCriteria, 
-    setSearchCriteria 
+    onPreview,
+    searchCriteria,
+    setSearchCriteria,
+    context,
+    systemInstruction,
+    onBook,
+    onAction
 }) => {
-  const [activeTab, setActiveTab] = useState<'explore' | 'trips' | 'wishlist'>('explore');
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  
-  const [openDatePicker, setOpenDatePicker] = useState<'checkIn' | 'checkOut' | null>(null);
+  const [activeTab, setActiveTab] = useState<'explore' | 'chat' | 'trips' | 'wishlist'>('explore');
+  const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
+  const [activeCategory, setActiveCategory] = useState('all');
 
-  useEffect(() => {
-    if (activeTab === 'trips') {
-        const loadBookings = async () => {
-            const data = await fetchGuestBookings();
-            setBookings(data);
-        };
-        loadBookings();
-    }
-  }, [activeTab]);
+  // Filter properties based on search criteria
+  const filteredProperties = properties.filter(p => {
+    // Location match
+    const searchLoc = searchCriteria.location.toLowerCase();
+    const locMatch = !searchLoc || 
+                     p.city.toLowerCase().includes(searchLoc) || 
+                     p.location.toLowerCase().includes(searchLoc) ||
+                     p.title.toLowerCase().includes(searchLoc);
+    
+    // Guest capacity match
+    const totalGuests = searchCriteria.adults + searchCriteria.children;
+    const capacityMatch = p.maxGuests >= totalGuests;
 
-  useEffect(() => {
-      const handleClickOutside = () => setOpenDatePicker(null);
-      if (openDatePicker) {
-          window.addEventListener('click', handleClickOutside);
-      }
-      return () => window.removeEventListener('click', handleClickOutside);
-  }, [openDatePicker]);
+    // Category match (Mock logic)
+    const categoryMatch = activeCategory === 'all' || 
+        (activeCategory === 'pools' && p.amenities.includes('Pool')) ||
+        (activeCategory === 'luxe' && p.baseWeekdayPrice > 12000) ||
+        (activeCategory === 'farms' && p.type === 'Farmhouse');
+
+    return locMatch && capacityMatch && categoryMatch;
+  });
 
   const updateSearch = (field: keyof SearchCriteria, value: any) => {
       setSearchCriteria({ ...searchCriteria, [field]: value });
   };
 
-  const hasActiveFilters = searchCriteria.location || searchCriteria.checkIn || searchCriteria.checkOut || (searchCriteria.adults + searchCriteria.children > 2);
-
-  const clearFilters = () => {
-      setSearchCriteria({
-          location: '',
-          checkIn: '',
-          checkOut: '',
-          adults: 2,
-          children: 0
-      });
-  };
-
   const today = new Date().toISOString().split('T')[0];
 
+  const CATEGORIES = [
+      { id: 'all', label: 'All', icon: Home },
+      { id: 'pools', label: 'Amazing Pools', icon: Waves },
+      { id: 'luxe', label: 'Luxe', icon: Crown },
+      { id: 'farms', label: 'Farms', icon: Tractor },
+      { id: 'views', label: 'Top Views', icon: Mountain },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 font-sans">
-      {/* Navbar */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-40 px-6 py-4 flex justify-between items-center shadow-sm">
+    <div className="h-[calc(100vh-80px)] md:h-screen bg-white dark:bg-gray-950 font-sans transition-colors duration-300 flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="bg-white/90 dark:bg-gray-950/90 backdrop-blur-md sticky top-0 z-40 px-6 py-4 flex justify-between items-center border-b border-gray-100 dark:border-gray-900 shrink-0 shadow-sm">
          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('explore')}>
              <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">A</div>
-             <span className="font-bold text-lg text-gray-900">AI BNB</span>
+             <span className="font-bold text-lg text-gray-900 dark:text-white hidden sm:block">AI BNB</span>
          </div>
-         <div className="flex items-center gap-6">
-             <button 
-                onClick={() => setActiveTab('explore')}
-                className={`text-sm font-semibold transition-colors ${activeTab === 'explore' ? 'text-brand-600' : 'text-gray-600 hover:text-gray-900'}`}
-             >
-                Explore
-             </button>
-             <button 
-                onClick={() => setActiveTab('trips')}
-                className={`text-sm font-semibold transition-colors ${activeTab === 'trips' ? 'text-brand-600' : 'text-gray-600 hover:text-gray-900'}`}
-             >
-                Trips
-             </button>
-             <button 
-                onClick={() => setActiveTab('wishlist')}
-                className={`text-sm font-semibold transition-colors ${activeTab === 'wishlist' ? 'text-brand-600' : 'text-gray-600 hover:text-gray-900'}`}
-             >
-                Wishlist
-             </button>
-             <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold text-sm hover:bg-gray-200 transition-colors cursor-pointer">
-                 G
-             </div>
+         
+         <div className="flex bg-gray-100 dark:bg-gray-900 p-1 rounded-full">
+            {[
+                { id: 'explore', icon: Compass, label: 'Explore' },
+                { id: 'chat', icon: Sparkles, label: 'Concierge' },
+                { id: 'trips', icon: Calendar, label: 'Trips' },
+                { id: 'wishlist', icon: Heart, label: 'Saved' }
+            ].map(tab => (
+                <button 
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${activeTab === tab.id ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                >
+                    <tab.icon className="w-4 h-4" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                </button>
+            ))}
          </div>
+         
+         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 text-white flex items-center justify-center font-bold text-xs">G</div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-12 animate-fadeIn">
+      <div className="flex-1 relative overflow-hidden flex flex-col">
         
+        {/* EXPLORE TAB (GRID VIEW + SEARCH) */}
         {activeTab === 'explore' && (
-            <>
-                {/* Hero Section */}
-                <div className="relative mb-16 isolate">
-                    <div className="absolute inset-0 rounded-3xl overflow-hidden shadow-2xl h-[500px] -z-10">
-                         <img src="https://images.unsplash.com/photo-1600596542815-2a4d9fdb52b9?q=80&w=2969&auto=format&fit=crop" className="w-full h-full object-cover transform scale-105" alt="Hero" />
-                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent"></div>
-                    </div>
-                    
-                    <div className="relative h-[500px] flex flex-col justify-center items-center px-4">
-                        <div className="text-center mb-10 max-w-3xl">
-                             <h1 className="text-4xl md:text-6xl font-extrabold text-white tracking-tight drop-shadow-xl mb-4 leading-tight">Find your perfect staycation</h1>
-                             <p className="text-white/95 text-lg md:text-xl font-medium drop-shadow-md">Discover luxury villas, cozy cottages, and unique homes across India.</p>
-                        </div>
-
-                        {/* Search Bar */}
-                        <div 
-                            className="bg-white rounded-full flex flex-col md:flex-row items-center shadow-2xl relative max-w-4xl w-full z-50 border border-gray-100" 
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                             
-                             {/* Location Input */}
-                             <div className="flex-1 w-full md:w-[32%] relative group px-6 py-4 hover:bg-gray-100 rounded-full cursor-pointer transition-colors">
-                                 <label className="text-[10px] font-bold uppercase text-gray-800 tracking-wider mb-0.5 block">Where</label>
-                                 <input 
-                                    type="text" 
-                                    placeholder="Search destinations" 
-                                    className="w-full text-sm font-bold text-gray-900 placeholder-gray-400 outline-none bg-transparent truncate"
+            <div className="flex-1 overflow-y-auto pb-32">
+                {/* Search Pill */}
+                <div className="sticky top-0 z-30 py-4 bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-900 px-4">
+                    <div className="max-w-4xl mx-auto">
+                        <div className="bg-white dark:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-800 shadow-md flex items-center divide-x divide-gray-100 dark:divide-gray-800 relative">
+                            {/* Where */}
+                            <div className="flex-1 px-6 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-l-full cursor-pointer group transition-colors">
+                                <label className="text-[10px] font-bold uppercase text-gray-800 dark:text-white block">Where</label>
+                                <input 
+                                    className="w-full bg-transparent text-sm text-gray-600 dark:text-gray-300 placeholder-gray-400 border-none outline-none p-0 truncate font-medium group-hover:text-gray-900 dark:group-hover:text-white"
+                                    placeholder="Search destinations"
                                     value={searchCriteria.location}
                                     onChange={(e) => updateSearch('location', e.target.value)}
-                                 />
-                                 {/* Divider */}
-                                 <div className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 w-px h-8 bg-gray-200 group-hover:hidden transition-all"></div>
-                             </div>
+                                />
+                            </div>
 
-                             {/* Date Inputs */}
-                             <div className="flex-1 w-full md:w-[36%] flex relative">
-                                 {/* Check In */}
-                                 <div 
-                                    className={`flex-1 px-6 py-4 cursor-pointer transition-colors relative rounded-full group ${openDatePicker === 'checkIn' ? 'bg-white shadow-lg z-20' : 'hover:bg-gray-100'}`} 
-                                    onClick={(e) => { e.stopPropagation(); setOpenDatePicker('checkIn'); }}
-                                 >
-                                    <label className="text-[10px] font-bold uppercase text-gray-800 tracking-wider block cursor-pointer mb-0.5">Check in</label>
-                                    <div className={`text-sm font-bold truncate ${searchCriteria.checkIn ? 'text-gray-900' : 'text-gray-400'}`}>
-                                        {searchCriteria.checkIn || 'Add dates'}
-                                    </div>
-                                    
-                                    {openDatePicker === 'checkIn' && (
+                            {/* Check In */}
+                            <div 
+                                className="px-6 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors relative min-w-[120px]"
+                                onClick={() => setActivePicker('checkIn')}
+                            >
+                                <label className="text-[10px] font-bold uppercase text-gray-800 dark:text-white block">Check in</label>
+                                <div className={`text-sm font-medium truncate ${searchCriteria.checkIn ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>
+                                    {searchCriteria.checkIn || 'Add dates'}
+                                </div>
+                                {activePicker === 'checkIn' && (
+                                    <div className="absolute top-[120%] left-0 z-50">
                                         <CalendarPopup 
                                             selectedDate={searchCriteria.checkIn}
                                             startDate={searchCriteria.checkIn}
@@ -150,231 +136,255 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                                             minDate={today}
                                             onSelect={(d) => {
                                                 updateSearch('checkIn', d);
-                                                if (!searchCriteria.checkOut || searchCriteria.checkOut <= d) {
-                                                    setOpenDatePicker('checkOut');
-                                                } else {
-                                                    setOpenDatePicker(null);
-                                                }
+                                                setActivePicker('checkOut');
                                             }}
-                                            onClose={() => setOpenDatePicker(null)}
+                                            onClose={() => setActivePicker(null)}
                                         />
-                                    )}
-                                    {/* Divider */}
-                                    {openDatePicker !== 'checkIn' && openDatePicker !== 'checkOut' && (
-                                        <div className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 w-px h-8 bg-gray-200 group-hover:hidden transition-all"></div>
-                                    )}
-                                 </div>
-
-                                 {/* Check Out */}
-                                 <div 
-                                    className={`flex-1 px-6 py-4 cursor-pointer transition-colors relative rounded-full group ${openDatePicker === 'checkOut' ? 'bg-white shadow-lg z-20' : 'hover:bg-gray-100'}`} 
-                                    onClick={(e) => { 
-                                        e.stopPropagation(); 
-                                        // Enforce Check-in first
-                                        if (!searchCriteria.checkIn) {
-                                            setOpenDatePicker('checkIn');
-                                        } else {
-                                            setOpenDatePicker('checkOut'); 
-                                        }
-                                    }}
-                                 >
-                                    <label className="text-[10px] font-bold uppercase text-gray-800 tracking-wider block cursor-pointer mb-0.5">Check out</label>
-                                    <div className={`text-sm font-bold truncate ${searchCriteria.checkOut ? 'text-gray-900' : 'text-gray-400'}`}>
-                                        {searchCriteria.checkOut || 'Add dates'}
                                     </div>
+                                )}
+                            </div>
 
-                                    {openDatePicker === 'checkOut' && (
+                            {/* Check Out */}
+                            <div 
+                                className="px-6 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors relative min-w-[120px]"
+                                onClick={() => {
+                                    if(!searchCriteria.checkIn) setActivePicker('checkIn');
+                                    else setActivePicker('checkOut');
+                                }}
+                            >
+                                <label className="text-[10px] font-bold uppercase text-gray-800 dark:text-white block">Check out</label>
+                                <div className={`text-sm font-medium truncate ${searchCriteria.checkOut ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>
+                                    {searchCriteria.checkOut || 'Add dates'}
+                                </div>
+                                {activePicker === 'checkOut' && (
+                                    <div className="absolute top-[120%] right-0 z-50">
                                         <CalendarPopup 
-                                            selectedDate={searchCriteria.checkOut} 
+                                            selectedDate={searchCriteria.checkOut}
                                             startDate={searchCriteria.checkIn}
                                             endDate={searchCriteria.checkOut}
                                             minDate={searchCriteria.checkIn || today}
                                             onSelect={(d) => {
                                                 updateSearch('checkOut', d);
-                                                setOpenDatePicker(null);
+                                                setActivePicker(null);
                                             }}
-                                            onClose={() => setOpenDatePicker(null)}
+                                            onClose={() => setActivePicker(null)}
                                         />
-                                    )}
-                                    {/* Divider */}
-                                    {openDatePicker !== 'checkOut' && (
-                                        <div className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 w-px h-8 bg-gray-200 group-hover:hidden transition-all"></div>
-                                    )}
-                                 </div>
-                             </div>
+                                    </div>
+                                )}
+                            </div>
 
-                             {/* Guests Input */}
-                             <div className="flex-1 w-full md:w-[32%] flex items-center pr-2 relative group pl-6 hover:bg-gray-100 rounded-full transition-colors cursor-pointer">
-                                 <div className="flex-1 py-4">
-                                     <label className="text-[10px] font-bold uppercase text-gray-800 tracking-wider mb-0.5 block cursor-pointer">Who</label>
-                                     <div className={`text-sm font-bold truncate ${searchCriteria.adults + searchCriteria.children > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
-                                         {(searchCriteria.adults + searchCriteria.children) > 0 
-                                            ? `${searchCriteria.adults + searchCriteria.children} guests` 
-                                            : 'Add guests'}
-                                     </div>
-                                 </div>
-                                 
-                                 {/* Guest Dropdown */}
-                                 <div className="absolute top-[120%] right-0 bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 w-80 z-50 cursor-default">
-                                     <div className="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
-                                         <div>
-                                             <div className="font-bold text-base text-gray-900">Adults</div>
-                                             <div className="text-xs text-gray-500">Ages 13 or above</div>
-                                         </div>
-                                         <div className="flex items-center gap-4">
-                                             <button onClick={() => updateSearch('adults', Math.max(1, searchCriteria.adults - 1))} className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors ${searchCriteria.adults <= 1 ? 'border-gray-100 text-gray-300' : 'border-gray-300 text-gray-600 hover:border-gray-900 hover:text-gray-900'}`} disabled={searchCriteria.adults <= 1}><Minus className="w-3 h-3"/></button>
-                                             <span className="font-mono w-4 text-center text-lg font-medium">{searchCriteria.adults}</span>
-                                             <button onClick={() => updateSearch('adults', searchCriteria.adults + 1)} className="w-8 h-8 rounded-full border border-gray-300 text-gray-600 flex items-center justify-center hover:border-gray-900 hover:text-gray-900 transition-colors"><Plus className="w-3 h-3"/></button>
-                                         </div>
-                                     </div>
-                                     <div className="flex justify-between items-center">
-                                         <div>
-                                             <div className="font-bold text-base text-gray-900">Children</div>
-                                             <div className="text-xs text-gray-500">Ages 2-12</div>
-                                         </div>
-                                         <div className="flex items-center gap-4">
-                                             <button onClick={() => updateSearch('children', Math.max(0, searchCriteria.children - 1))} className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors ${searchCriteria.children <= 0 ? 'border-gray-100 text-gray-300' : 'border-gray-300 text-gray-600 hover:border-gray-900 hover:text-gray-900'}`} disabled={searchCriteria.children <= 0}><Minus className="w-3 h-3"/></button>
-                                             <span className="font-mono w-4 text-center text-lg font-medium">{searchCriteria.children}</span>
-                                             <button onClick={() => updateSearch('children', searchCriteria.children + 1)} className="w-8 h-8 rounded-full border border-gray-300 text-gray-600 flex items-center justify-center hover:border-gray-900 hover:text-gray-900 transition-colors"><Plus className="w-3 h-3"/></button>
-                                         </div>
-                                     </div>
-                                 </div>
+                            {/* Guests */}
+                            <div className="pl-6 pr-2 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-r-full cursor-pointer flex items-center gap-3 transition-colors relative">
+                                <div onClick={() => setActivePicker(activePicker === 'guests' ? null : 'guests')} className="flex-1 min-w-[80px]">
+                                    <label className="text-[10px] font-bold uppercase text-gray-800 dark:text-white block">Who</label>
+                                    <div className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                                        {searchCriteria.adults + searchCriteria.children} guests
+                                    </div>
+                                </div>
+                                <div className="w-10 h-10 bg-brand-600 hover:bg-brand-700 text-white rounded-full flex items-center justify-center shadow-md transition-transform active:scale-95">
+                                    <Search className="w-4 h-4" />
+                                </div>
 
-                                 {/* Search Button */}
-                                 <div className="">
-                                     <button className="bg-brand-600 hover:bg-brand-700 text-white p-4 rounded-full transition-all shadow-lg hover:shadow-brand-200 active:scale-95 flex items-center gap-2">
-                                         <Search className="w-5 h-5" />
-                                         <span className="md:hidden font-bold pr-2">Search</span>
-                                     </button>
-                                 </div>
-                             </div>
+                                {activePicker === 'guests' && (
+                                    <div className="absolute top-[120%] right-0 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 w-80 z-50 cursor-default" onClick={e => e.stopPropagation()}>
+                                        <div className="flex justify-between items-center mb-4">
+                                            <div>
+                                                <div className="font-bold text-gray-900 dark:text-white">Adults</div>
+                                                <div className="text-sm text-gray-500">Ages 13 or above</div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <button onClick={() => updateSearch('adults', Math.max(1, searchCriteria.adults - 1))} className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white">-</button>
+                                                <span className="font-mono w-4 text-center dark:text-white">{searchCriteria.adults}</span>
+                                                <button onClick={() => updateSearch('adults', searchCriteria.adults + 1)} className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white">+</button>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <div className="font-bold text-gray-900 dark:text-white">Children</div>
+                                                <div className="text-sm text-gray-500">Ages 2-12</div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <button onClick={() => updateSearch('children', Math.max(0, searchCriteria.children - 1))} className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white">-</button>
+                                                <span className="font-mono w-4 text-center dark:text-white">{searchCriteria.children}</span>
+                                                <button onClick={() => updateSearch('children', searchCriteria.children + 1)} className="w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 dark:text-white">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        
+                        {/* Category Bar */}
+                        <div className="flex items-center justify-center gap-8 mt-6 overflow-x-auto pb-2 scrollbar-hide">
+                            {CATEGORIES.map(cat => (
+                                <button 
+                                    key={cat.id}
+                                    onClick={() => setActiveCategory(cat.id)}
+                                    className={`flex flex-col items-center gap-2 group min-w-[60px] pb-2 border-b-2 transition-all ${activeCategory === cat.id ? 'border-gray-900 dark:border-white text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:border-gray-200 dark:hover:border-gray-700'}`}
+                                >
+                                    <cat.icon className={`w-6 h-6 ${activeCategory === cat.id ? 'stroke-2' : 'stroke-1 group-hover:stroke-2'}`} />
+                                    <span className="text-xs font-medium whitespace-nowrap">{cat.label}</span>
+                                </button>
+                            ))}
                         </div>
                     </div>
                 </div>
 
-                <section>
-                    <div className="flex justify-between items-end mb-6">
-                        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            {hasActiveFilters ? 'Search Results' : 'Recommended for you'}
-                        </h2>
-                        {hasActiveFilters && (
-                            <button onClick={clearFilters} className="text-sm font-semibold text-gray-500 hover:text-gray-900 flex items-center gap-1 bg-gray-100 px-3 py-1.5 rounded-full transition-colors">
-                                <X className="w-4 h-4" /> Clear Filters
-                            </button>
-                        )}
-                    </div>
-                    
-                    {properties.length === 0 ? (
-                         <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border border-dashed border-gray-200 text-center px-4">
-                            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6 text-gray-300 animate-pulse">
-                                <Search className="w-10 h-10" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">No properties match your search</h3>
-                            <p className="text-gray-500 max-w-md mx-auto mb-8">We couldn't find any matches for your criteria. Try changing your dates, removing filters, or ask our AI for help.</p>
-                            <button onClick={clearFilters} className="text-brand-600 font-bold hover:underline">Clear all filters</button>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-10">
-                            {properties.map(property => (
+                {/* Property Grid */}
+                <div className="max-w-[1600px] mx-auto px-6 py-8">
+                     {filteredProperties.length === 0 ? (
+                         <div className="text-center py-20">
+                             <div className="bg-gray-50 dark:bg-gray-800/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Search className="w-8 h-8 text-gray-400" />
+                             </div>
+                             <h3 className="text-xl font-bold text-gray-900 dark:text-white">No stays found</h3>
+                             <p className="text-gray-500 dark:text-gray-400 mt-2">Try adjusting your search filters or ask our AI Concierge for help.</p>
+                             <button 
+                                onClick={() => setActiveTab('chat')}
+                                className="mt-6 px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-full font-bold shadow-lg transition-transform active:scale-95 flex items-center gap-2 mx-auto"
+                             >
+                                <Sparkles className="w-4 h-4" /> Ask Concierge
+                             </button>
+                         </div>
+                     ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10">
+                            {filteredProperties.map(property => (
                                 <div 
                                     key={property.id} 
-                                    onClick={() => onPreview(property)}
                                     className="group cursor-pointer"
+                                    onClick={() => onPreview(property)}
                                 >
-                                    <div className="aspect-[4/3] bg-gray-200 rounded-2xl relative overflow-hidden mb-3">
-                                        <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                                        <button className="absolute top-3 right-3 p-2 bg-black/10 hover:bg-black/30 backdrop-blur-sm rounded-full text-white transition-all">
-                                            <Heart className="w-5 h-5" />
+                                    <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-200 dark:bg-gray-800 mb-3">
+                                        <img 
+                                            src={property.images[0]} 
+                                            alt={property.title} 
+                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                        />
+                                        <button className="absolute top-3 right-3 p-2 rounded-full hover:bg-white/10 hover:backdrop-blur-sm transition-colors text-white/70 hover:text-white">
+                                            <Heart className="w-6 h-6 stroke-[2px]" />
                                         </button>
-                                        <div className="absolute top-3 left-3 bg-white/95 backdrop-blur px-2.5 py-1 rounded-md text-xs font-bold shadow-sm uppercase tracking-wide">
+                                        <div className="absolute top-3 left-3 bg-white/90 dark:bg-gray-900/90 backdrop-blur px-2.5 py-1 rounded-md text-xs font-bold text-gray-900 dark:text-white shadow-sm">
                                             Guest favorite
                                         </div>
                                     </div>
                                     
-                                    <div>
-                                        <div className="flex justify-between items-start mb-1">
-                                            <h3 className="font-bold text-gray-900 line-clamp-1 text-base">{property.title}</h3>
-                                            <div className="flex items-center gap-1 text-sm font-medium"><span className="text-black">★</span> 4.85</div>
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h3 className="font-bold text-gray-900 dark:text-white truncate pr-2">{property.city}, {property.state}</h3>
+                                            <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5 line-clamp-1">{property.title}</p>
+                                            <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5">{property.maxGuests} guests · {property.bedrooms} bedrooms</p>
+                                            <div className="mt-1.5 flex items-baseline gap-1">
+                                                <span className="font-bold text-gray-900 dark:text-white">₹{property.baseWeekdayPrice.toLocaleString()}</span>
+                                                <span className="text-gray-900 dark:text-white text-sm"> night</span>
+                                            </div>
                                         </div>
-                                        <p className="text-gray-500 text-sm line-clamp-1 mb-0.5">{property.location || property.city}</p>
-                                        <p className="text-gray-500 text-sm mb-2">{property.bedrooms} beds · {property.maxGuests} guests</p>
-                                        <div className="flex items-baseline gap-1 mt-1">
-                                            <span className="font-bold text-gray-900 text-base">₹{property.baseWeekdayPrice.toLocaleString()}</span>
-                                            <span className="text-gray-500 font-normal text-sm">night</span>
+                                        <div className="flex items-center gap-1 text-sm text-gray-900 dark:text-white">
+                                            <Star className="w-3.5 h-3.5 fill-current" />
+                                            <span>{property.rating || 4.85}</span>
                                         </div>
                                     </div>
                                 </div>
                             ))}
                         </div>
-                    )}
-                </section>
-            </>
-        )}
-
-        {/* Trips Tab */}
-        {activeTab === 'trips' && (
-             <section className="animate-fadeIn">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                    <Calendar className="w-6 h-6 text-brand-600"/> Your Trips
-                </h2>
-                {bookings.length === 0 ? (
-                    <div className="text-center py-20 bg-white rounded-2xl border border-gray-200">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
-                            <Calendar className="w-8 h-8" />
-                        </div>
-                        <h3 className="text-lg font-bold text-gray-900">No trips booked... yet!</h3>
-                        <p className="text-gray-500 mt-1">Time to dust off your suitcase and start exploring.</p>
-                        <button onClick={() => setActiveTab('explore')} className="mt-6 px-6 py-2.5 bg-brand-600 text-white rounded-xl font-bold shadow-lg hover:bg-brand-700 transition-all">Start Exploring</button>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {bookings.map(booking => (
-                            <div key={booking.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow group cursor-pointer">
-                                <div className="h-48 bg-gray-200 relative overflow-hidden">
-                                    <img src={booking.thumbnail || 'https://via.placeholder.com/400'} alt={booking.propertyName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                                    <div className="absolute top-4 right-4 bg-white/95 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-green-700 shadow-sm border border-green-100 uppercase tracking-wide flex items-center gap-1">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                                        {booking.status}
-                                    </div>
-                                </div>
-                                <div className="p-5">
-                                    <h3 className="font-bold text-lg text-gray-900 line-clamp-1 mb-1">{booking.propertyName}</h3>
-                                    <p className="text-sm text-gray-500 mb-4 flex items-center gap-2">
-                                        <Calendar className="w-3.5 h-3.5" /> 
-                                        {booking.startDate} - {booking.endDate}
-                                    </p>
-                                    <div className="flex gap-3 pt-2 border-t border-gray-50">
-                                        <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold hover:bg-gray-50 transition-colors text-gray-700">
-                                            View Details
-                                        </button>
-                                        <button className="px-4 rounded-xl border border-gray-200 text-gray-400 hover:text-brand-600 hover:bg-brand-50 transition-colors">
-                                            <MessageSquare className="w-5 h-5" />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </section>
-        )}
-
-        {/* Wishlist Tab */}
-        {activeTab === 'wishlist' && (
-             <section className="animate-fadeIn">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-                    <Heart className="w-6 h-6 text-brand-600"/> Your Wishlist
-                </h2>
-                <div className="text-center py-24 bg-white rounded-2xl border border-gray-200">
-                    <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300">
-                        <Heart className="w-10 h-10" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900">Your wishlist is empty</h3>
-                    <p className="text-gray-500 mt-2">As you search, click the heart icon to save your favorite places.</p>
+                     )}
                 </div>
-            </section>
+            </div>
+        )}
+
+        {/* CHAT TAB (CONCIERGE) */}
+        {/* Kept alive via display:none to preserve history */}
+        <div className={`flex-1 flex flex-col ${activeTab === 'chat' ? 'flex' : 'hidden'}`}>
+             <AIChat 
+                mode="fullscreen"
+                context={context} 
+                systemInstruction={systemInstruction} 
+                properties={properties} 
+                onPreview={onPreview} 
+                onBook={onBook}
+                onAction={onAction}
+            />
+        </div>
+
+        {/* TRIPS TAB */}
+        {activeTab === 'trips' && (
+             <div className="flex-1 overflow-y-auto">
+                 <TripsView />
+             </div>
+        )}
+
+        {/* SAVED TAB */}
+        {activeTab === 'wishlist' && (
+             <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center text-center p-8">
+                 <div className="w-20 h-20 bg-gray-100 dark:bg-gray-900 rounded-full flex items-center justify-center mb-4">
+                     <Heart className="w-8 h-8 text-gray-400" />
+                 </div>
+                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">Your wishlist is empty</h2>
+                 <p className="text-gray-500 mt-2">Start exploring to save your favorite stays.</p>
+                 <button 
+                    onClick={() => setActiveTab('explore')}
+                    className="mt-6 px-6 py-2.5 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold transition-transform active:scale-95"
+                 >
+                    Start Exploring
+                 </button>
+             </div>
         )}
       </div>
     </div>
   );
 };
+
+const TripsView = () => {
+    const [bookings, setBookings] = React.useState<Booking[]>([]);
+    const [loading, setLoading] = React.useState(true);
+    
+    React.useEffect(() => {
+        fetchGuestBookings()
+            .then(setBookings)
+            .finally(() => setLoading(false));
+    }, []);
+
+    return (
+        <div className="max-w-4xl mx-auto w-full p-6 animate-fadeIn pb-32">
+            <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-8 tracking-tight">Trips</h1>
+            {loading ? (
+                <div className="p-8 text-center text-gray-400">Loading trips...</div>
+            ) : bookings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-dashed border-gray-200 dark:border-gray-800">
+                    <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                        <Calendar className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">No trips booked... yet!</p>
+                    <p className="text-gray-500 mt-1 mb-6">Time to dust off your bags and start planning.</p>
+                </div>
+            ) : (
+                <div className="space-y-6">
+                    <div className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest">Upcoming</div>
+                    {bookings.map(b => (
+                        <div key={b.id} className="flex gap-4 bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow cursor-pointer group">
+                            <div className="w-24 h-24 rounded-xl overflow-hidden shrink-0">
+                                <img src={b.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Trip" />
+                            </div>
+                            <div className="flex-1 flex flex-col justify-center">
+                                <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-1">{b.propertyName}</h3>
+                                <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">{b.location}</div>
+                                <div className="flex items-center gap-3 text-sm">
+                                    <span className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-md font-medium">{b.startDate} — {b.endDate}</span>
+                                    {b.status === 'confirmed' && (
+                                        <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-1">
+                                            Confirmed
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex items-center pr-4">
+                                <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded-full group-hover:bg-gray-100 dark:group-hover:bg-gray-700 transition-colors">
+                                    <ArrowRight className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-gray-900 dark:group-hover:text-white" />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}

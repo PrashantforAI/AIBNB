@@ -1,3 +1,4 @@
+
 import { db } from '../firebaseConfig';
 import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { Property } from '../types';
@@ -29,6 +30,12 @@ export const savePropertyToDb = async (property: Property) => {
     // CRITICAL FIX: Firestore throws an error if fields are 'undefined'. 
     // We sanitize the object by stringifying and parsing it, which removes undefined keys.
     const safeData = JSON.parse(JSON.stringify(property));
+
+    // Check payload size roughly
+    const size = new Blob([JSON.stringify(safeData)]).size;
+    if (size > 950000) { // 950KB limit (Firestore limit is 1MB)
+        throw new Error("Property data is too large. Please reduce the number or size of images.");
+    }
 
     await setDoc(doc(db, COLLECTION_NAME, property.id), safeData);
     return property;

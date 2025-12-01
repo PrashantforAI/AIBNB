@@ -1,3 +1,4 @@
+
 import { db } from '../firebaseConfig';
 import { collection, addDoc, doc, getDoc, updateDoc, query, getDocs } from 'firebase/firestore';
 import { Booking, Property } from '../types';
@@ -41,29 +42,37 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status'>)
         }
 
         // 3. Add Booking Record
-        const newBooking: Booking = {
+        // Ensure thumbnail has a value and sanitize undefined fields
+        const rawBooking = {
             ...bookingData,
+            thumbnail: bookingData.thumbnail || 'https://via.placeholder.com/300?text=No+Image',
             id: '', // Will be set by firestore
             status: 'confirmed'
         };
+
+        // Remove undefined values to prevent Firestore "Unsupported field value: undefined" error
+        const safeBooking = JSON.parse(JSON.stringify(rawBooking));
         
-        const docRef = await addDoc(collection(db, BOOKING_COLLECTION), newBooking);
+        const docRef = await addDoc(collection(db, BOOKING_COLLECTION), safeBooking);
         const bookingId = docRef.id;
 
         // 4. Update Property Calendar
-        const updatedCalendar = { ...currentCalendar };
+        const updatedCalendar: any = { ...currentCalendar };
         datesToBlock.forEach(dateStr => {
             updatedCalendar[dateStr] = {
                 date: dateStr,
                 status: 'booked',
-                price: currentCalendar[dateStr]?.price, // Keep existing price or use booking price
+                price: currentCalendar[dateStr]?.price, // Keep existing price if set
                 guestName: 'Guest', // In real app, use auth user name
                 note: `Booking ID: ${bookingId}`
             };
         });
 
+        // CRITICAL FIX: Sanitize calendar to remove any undefined keys (like price if not set)
+        const safeCalendar = JSON.parse(JSON.stringify(updatedCalendar));
+
         await updateDoc(propertyRef, {
-            calendar: updatedCalendar
+            calendar: safeCalendar
         });
 
         return bookingId;

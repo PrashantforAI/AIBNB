@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Property, DaySettings } from '../types';
 import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Save, Check, User, MessageSquare, AlertCircle } from 'lucide-react';
@@ -11,7 +12,6 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(properties[0]?.id || '');
   const [currentDate, setCurrentDate] = useState(new Date());
   
-  // Selection State: Using a Set for multiple non-concurrent dates
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
   const [lastClickedDate, setLastClickedDate] = useState<string | null>(null);
 
@@ -24,8 +24,6 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
 
   // --- Date Helpers ---
-
-  // robustly parse YYYY-MM-DD to a local Date object without UTC shifts
   const parseDate = (dateStr: string) => {
       const [y, m, d] = dateStr.split('-').map(Number);
       return new Date(y, m - 1, d);
@@ -45,17 +43,14 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
   const isWeekendDay = (dateStr: string) => {
       const d = parseDate(dateStr);
       const day = d.getDay();
-      // Friday (5), Saturday (6), Sunday (0)
       return day === 5 || day === 6 || day === 0;
   };
 
   // --- Interaction Handlers ---
-
   const handleDateClick = (dateStr: string, e: React.MouseEvent) => {
     const newSet = new Set<string>(e.ctrlKey || e.metaKey ? selectedDates : []);
     
     if (e.shiftKey && lastClickedDate) {
-        // Range selection
         const start = parseDate(lastClickedDate);
         const end = parseDate(dateStr);
         const low = start < end ? start : end;
@@ -67,7 +62,6 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
             loop.setDate(loop.getDate() + 1);
         }
     } else {
-        // Single or Toggle
         if (e.ctrlKey || e.metaKey) {
              if (newSet.has(dateStr)) newSet.delete(dateStr);
              else newSet.add(dateStr);
@@ -98,8 +92,9 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
     if (!selectedProperty) return;
 
     const newCalendar: Record<string, DaySettings> = { ...(selectedProperty.calendar || {}) };
+    const dateList: string[] = Array.from(selectedDates) as string[];
 
-    selectedDates.forEach((dateStr: string) => {
+    dateList.forEach((dateStr: string) => {
         const isWeekend = isWeekendDay(dateStr);
         if (applyWeekendsOnly && !isWeekend) return;
 
@@ -109,7 +104,6 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
         const price = parseInt(editPrice);
         const minStay = parseInt(editMinStay);
         
-        // Fix: Avoid setting undefined values
         const settings: DaySettings = {
             date: dateStr,
             status: editStatus as any,
@@ -153,7 +147,7 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
 
     const days = [];
     for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="bg-white/30 border-b border-r border-gray-100"></div>);
+      days.push(<div key={`empty-${i}`} className="bg-white/30 dark:bg-gray-800/30 border-b border-r border-gray-100 dark:border-gray-800 min-h-[100px]"></div>);
     }
 
     for (let d = 1; d <= daysInMonth; d++) {
@@ -167,19 +161,19 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
       const price = daySettings?.price || (isWeekend ? selectedProperty?.baseWeekendPrice : selectedProperty?.baseWeekdayPrice);
       const guestName = daySettings?.guestName;
       
-      let bgClass = 'bg-white hover:bg-gray-50';
-      if (status === 'blocked') bgClass = 'bg-gray-50 pattern-diagonal-lines-sm text-gray-400';
-      if (status === 'booked') bgClass = 'bg-red-50/20';
-      if (isSelected) bgClass = 'bg-gray-900 text-white ring-2 ring-inset ring-gray-900 z-10';
+      let bgClass = 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800';
+      if (status === 'blocked') bgClass = 'bg-gray-50 dark:bg-gray-800 pattern-diagonal-lines-sm text-gray-400 dark:text-gray-500';
+      if (status === 'booked') bgClass = 'bg-red-50/20 dark:bg-red-900/20';
+      if (isSelected) bgClass = 'bg-gray-900 dark:bg-white text-white dark:text-black ring-2 ring-inset ring-gray-900 dark:ring-white z-10';
 
       days.push(
         <div 
           key={dateStr}
           onClick={(e) => handleDateClick(dateStr, e)}
-          className={`relative p-2 border-b border-r border-gray-200 cursor-pointer transition-all flex flex-col justify-between group select-none ${bgClass}`}
+          className={`relative p-2 border-b border-r border-gray-200 dark:border-gray-800 cursor-pointer transition-all flex flex-col justify-between group select-none min-h-[100px] ${bgClass}`}
         >
           <div className="flex justify-between items-start">
-             <span className={`text-sm font-semibold ${isSelected ? 'text-white' : (status === 'booked' ? 'text-gray-400' : 'text-gray-900')} ${d === 1 ? 'underline decoration-brand-300' : ''}`}>
+             <span className={`text-sm font-semibold ${isSelected ? 'text-white dark:text-black' : (status === 'booked' ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-200')} ${d === 1 ? 'underline decoration-brand-300' : ''}`}>
                  {d}
              </span>
           </div>
@@ -187,17 +181,17 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
           <div className="flex flex-col items-center justify-center flex-1">
              {status === 'booked' ? (
                  <div className="flex flex-col items-center animate-fadeIn">
-                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 border-2 border-white shadow-sm ${isSelected ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>
+                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 border-2 border-white dark:border-gray-700 shadow-sm ${isSelected ? 'bg-white/20 text-white dark:text-black' : 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300'}`}>
                         <User className="w-4 h-4" />
                      </div>
-                     <span className={`text-[10px] font-bold truncate max-w-full px-1 ${isSelected ? 'text-gray-300' : 'text-gray-900'}`}>{guestName || 'Reserved'}</span>
+                     <span className={`text-[10px] font-bold truncate max-w-full px-1 ${isSelected ? 'text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-gray-300'}`}>{guestName || 'Reserved'}</span>
                  </div>
              ) : (
                 <div className="flex flex-col items-center">
                     {status === 'blocked' ? (
-                         <span className={`text-xs font-medium ${isSelected ? 'text-gray-300' : 'text-gray-400'}`}>Blocked</span>
+                         <span className={`text-xs font-medium ${isSelected ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500'}`}>Blocked</span>
                     ) : (
-                        <span className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-gray-600'}`}>₹{price?.toLocaleString()}</span>
+                        <span className={`text-sm font-medium ${isSelected ? 'text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'}`}>₹{price?.toLocaleString()}</span>
                     )}
                 </div>
              )}
@@ -213,195 +207,149 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200 animate-fadeIn">
+    <div className="flex flex-col h-[calc(100vh-6rem)] bg-white dark:bg-gray-900 rounded-2xl shadow-xl overflow-hidden border border-gray-200 dark:border-gray-800 animate-fadeIn relative transition-colors duration-300">
       {/* Top Bar */}
-      <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-white z-20 shrink-0 h-20">
-        <div className="flex items-center gap-6">
+      <div className="px-4 md:px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex flex-col md:flex-row justify-between items-center bg-white dark:bg-gray-900 z-20 shrink-0 gap-4">
+        <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
              <div className="flex items-center gap-4">
-                <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-full transition-all text-gray-900 border border-gray-200 shadow-sm"><ChevronLeft className="w-4 h-4"/></button>
-                <span className="font-bold text-xl text-gray-900 w-48 text-center">
+                <button onClick={prevMonth} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-all text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 shadow-sm"><ChevronLeft className="w-4 h-4"/></button>
+                <span className="font-bold text-lg md:text-xl text-gray-900 dark:text-white w-36 md:w-48 text-center">
                     {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
                 </span>
-                <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-full transition-all text-gray-900 border border-gray-200 shadow-sm"><ChevronRight className="w-4 h-4"/></button>
+                <button onClick={nextMonth} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-all text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 shadow-sm"><ChevronRight className="w-4 h-4"/></button>
              </div>
-             
-             <div className="h-8 w-px bg-gray-200"></div>
-
-             <select 
-                value={selectedPropertyId} 
-                onChange={(e) => setSelectedPropertyId(e.target.value)}
-                className="pl-3 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-gray-900 outline-none hover:bg-gray-100 transition-colors"
-             >
-                {properties.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-             </select>
         </div>
         
-        <div className="flex gap-4 text-xs font-medium text-gray-500">
-             <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-red-100 border border-red-200"></div>Booked</div>
-             <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-gray-200 pattern-diagonal-lines-sm"></div>Blocked</div>
-             <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full border border-gray-300"></div>Available</div>
+        <div className="flex items-center justify-between w-full md:w-auto gap-4">
+            <select 
+                value={selectedPropertyId} 
+                onChange={(e) => setSelectedPropertyId(e.target.value)}
+                className="pl-3 pr-8 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-semibold text-gray-900 dark:text-white focus:ring-2 focus:ring-gray-900 dark:focus:ring-white outline-none hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors w-full md:w-auto"
+            >
+                {properties.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+            </select>
+            <div className="hidden md:flex gap-4 text-xs font-medium text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-red-100 dark:bg-red-900 border border-red-200 dark:border-red-800"></div>Booked</div>
+                <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-gray-200 dark:bg-gray-700 pattern-diagonal-lines-sm"></div>Blocked</div>
+            </div>
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
         {/* Calendar Grid */}
-        <div className="flex-1 flex flex-col bg-white">
-            <div className="grid grid-cols-7 border-b border-gray-200 shrink-0">
+        <div className="flex-1 flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-800 shrink-0 bg-gray-50 dark:bg-gray-800">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, i) => (
-                    <div key={day} className={`py-3 text-center text-xs font-bold uppercase tracking-wider ${i === 0 || i === 6 ? 'text-gray-900' : 'text-gray-500'}`}>
+                    <div key={day} className={`py-3 text-center text-xs font-bold uppercase tracking-wider ${i === 0 || i === 6 ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
                         {day}
                     </div>
                 ))}
             </div>
-            <div className="flex-1 grid grid-cols-7 grid-rows-6 border-l border-gray-200">
-                {renderCalendar()}
+            <div className="flex-1 overflow-y-auto overflow-x-auto">
+                <div className="grid grid-cols-7 border-l border-gray-200 dark:border-gray-800 min-w-[600px] md:min-w-0">
+                    {renderCalendar()}
+                </div>
             </div>
         </div>
 
-        {/* Dynamic Sidebar Panel */}
+        {/* Dynamic Sidebar/Bottom Panel */}
         {selectedDates.size > 0 && (
-            <div className="w-80 bg-white border-l border-gray-200 flex flex-col shadow-2xl z-30 shrink-0 animate-slideInRight">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+            <div className="w-full md:w-80 bg-white dark:bg-gray-900 border-t md:border-t-0 md:border-l border-gray-200 dark:border-gray-800 flex flex-col shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.1)] md:shadow-2xl z-30 shrink-0 h-1/2 md:h-auto animate-slideUp md:animate-slideInRight transition-colors duration-300">
+                <div className="p-4 md:p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900 md:bg-white md:dark:bg-gray-900">
                     <div>
-                        <h3 className="font-bold text-gray-900 text-lg">
+                        <h3 className="font-bold text-gray-900 dark:text-white text-lg">
                             {isSelectionBooked ? 'Booking Details' : 'Edit Selection'}
                         </h3>
-                        <p className="text-xs text-gray-500 mt-0.5">{selectedDates.size} date{selectedDates.size > 1 ? 's' : ''} selected</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{selectedDates.size} date{selectedDates.size > 1 ? 's' : ''} selected</p>
                     </div>
-                    <button onClick={handleClearSelection} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-full transition-colors">
+                    <button onClick={handleClearSelection} className="p-1.5 text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-full transition-colors">
                         <X className="w-5 h-5"/>
                     </button>
                 </div>
 
+                <div className="flex-1 p-4 md:p-6 space-y-6 overflow-y-auto">
                 {isSelectionBooked && bookingDetails ? (
                     // --- BOOKING DETAILS VIEW ---
-                    <div className="flex-1 p-6 space-y-8 overflow-y-auto">
-                        <div className="flex flex-col items-center py-8 bg-gradient-to-b from-gray-50 to-white rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden">
+                    <>
+                        <div className="flex flex-col items-center py-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
                              <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-red-400 to-red-600"></div>
-                             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-gray-700 mb-4 text-2xl font-bold border border-gray-200 shadow-md">
+                             <div className="w-16 h-16 bg-gray-50 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-700 dark:text-gray-300 mb-3 text-xl font-bold border border-gray-100 dark:border-gray-600">
                                 {bookingDetails.guestName.charAt(0)}
                              </div>
-                             <h3 className="text-xl font-bold text-gray-900">{bookingDetails.guestName}</h3>
-                             <span className="text-xs font-semibold text-green-700 bg-green-50 px-3 py-1 rounded-full mt-2 border border-green-100 flex items-center gap-1">
+                             <h3 className="text-lg font-bold text-gray-900 dark:text-white">{bookingDetails.guestName}</h3>
+                             <span className="text-[10px] font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full mt-1 border border-green-100 dark:border-green-800 flex items-center gap-1">
                                 <Check className="w-3 h-3" /> Confirmed
                              </span>
                         </div>
 
-                        <div className="space-y-4">
-                             <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">Reservation Info</h4>
-                             <div className="space-y-3">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-gray-500">Dates</span>
-                                    <div className="text-right">
-                                        <div className="text-sm font-semibold text-gray-900">{bookingDetails.startDate}</div>
-                                        <div className="text-xs text-gray-400">to {bookingDetails.endDate}</div>
-                                    </div>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-sm text-gray-500">Duration</span>
-                                    <span className="text-sm font-semibold text-gray-900">{bookingDetails.nights} Nights</span>
-                                </div>
+                        <div className="space-y-3">
+                             <div className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-800 pb-2">
+                                <span className="text-gray-500 dark:text-gray-400">Dates</span>
+                                <span className="font-semibold text-gray-900 dark:text-white">{bookingDetails.startDate} <span className="text-gray-400 mx-1">→</span> {bookingDetails.endDate}</span>
                              </div>
-                             
-                             <div className="pt-4 border-t border-dashed border-gray-200 flex justify-between items-end">
-                                 <span className="text-sm font-medium text-gray-500 pb-1">Total Payout</span>
-                                 <span className="text-2xl font-bold text-gray-900">₹{bookingDetails.totalPayout.toLocaleString()}</span>
+                             <div className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-800 pb-2">
+                                <span className="text-gray-500 dark:text-gray-400">Total Payout</span>
+                                <span className="font-bold text-gray-900 dark:text-white">₹{bookingDetails.totalPayout.toLocaleString()}</span>
                              </div>
                         </div>
 
-                        <div className="space-y-3 pt-6">
-                             <button className="w-full py-3 bg-white border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 shadow-sm">
-                                 <MessageSquare className="w-4 h-4" /> Message Guest
-                             </button>
-                             <button className="w-full py-3 bg-white border border-red-100 text-red-600 font-semibold rounded-xl hover:bg-red-50 transition-colors flex items-center justify-center gap-2">
-                                 <AlertCircle className="w-4 h-4" /> Cancel Reservation
-                             </button>
-                        </div>
-                    </div>
+                        <button className="w-full py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 font-semibold rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 shadow-sm text-sm">
+                            <MessageSquare className="w-4 h-4" /> Message Guest
+                        </button>
+                    </>
                 ) : (
-                    // --- EDIT FORM VIEW (For Available/Blocked Dates) ---
-                    <div className="flex-1 p-6 space-y-8 overflow-y-auto">
+                    // --- EDIT FORM VIEW ---
+                    <>
                         <div className="space-y-4">
-                            <h4 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2">Price Settings</h4>
-                            <div className="space-y-3">
-                                <label className="text-xs font-medium text-gray-500 uppercase">Nightly Price</label>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-3 text-gray-900 font-semibold">₹</span>
-                                    <input 
-                                        type="number" 
-                                        value={editPrice}
-                                        onChange={e => setEditPrice(e.target.value)}
-                                        disabled={editStatus === 'blocked'}
-                                        className="w-full pl-8 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 font-bold text-lg focus:ring-2 focus:ring-black focus:border-black outline-none transition-all disabled:bg-gray-50 disabled:text-gray-400 shadow-sm"
-                                    />
-                                </div>
+                            <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Pricing</h4>
+                            <div className="relative">
+                                <span className="absolute left-4 top-3 text-gray-900 dark:text-white font-bold">₹</span>
+                                <input 
+                                    type="number" 
+                                    value={editPrice}
+                                    onChange={e => setEditPrice(e.target.value)}
+                                    disabled={editStatus === 'blocked'}
+                                    className="w-full pl-8 pr-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white font-bold text-lg focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-black dark:focus:border-white outline-none transition-all disabled:bg-gray-50 dark:disabled:bg-gray-900 disabled:text-gray-400 shadow-sm"
+                                />
                             </div>
-
-                             <label className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors bg-white shadow-sm">
+                             <label className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 transition-colors bg-white dark:bg-gray-800 shadow-sm">
                                 <input 
                                     type="checkbox" 
                                     checked={applyWeekendsOnly}
                                     onChange={e => setApplyWeekendsOnly(e.target.checked)}
-                                    className="w-5 h-5 text-black rounded border-gray-300 focus:ring-black"
+                                    className="w-5 h-5 text-black dark:text-white rounded border-gray-300 dark:border-gray-600 focus:ring-black dark:focus:ring-white"
                                 />
-                                <div>
-                                    <span className="text-sm font-bold text-gray-900 block">Apply to weekends only</span>
-                                    <span className="text-xs text-gray-500 block leading-tight mt-0.5">Fridays, Saturdays, Sundays</span>
-                                </div>
+                                <span className="text-sm font-medium text-gray-900 dark:text-white">Apply to weekends only</span>
                             </label>
                         </div>
 
                         <div className="space-y-4">
-                            <h4 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2">Availability</h4>
-                            <div className="flex flex-col gap-2">
-                                <label className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${editStatus === 'available' ? 'border-black bg-gray-50 ring-1 ring-black shadow-sm' : 'border-gray-200 hover:bg-gray-50'}`}>
-                                    <span className="text-sm font-bold text-gray-900">Available</span>
-                                    <input 
-                                        type="radio" 
-                                        name="status"
-                                        checked={editStatus === 'available'}
-                                        onChange={() => setEditStatus('available')}
-                                        className="w-4 h-4 text-black focus:ring-black"
-                                    />
-                                </label>
-                                <label className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${editStatus === 'blocked' ? 'border-black bg-gray-50 ring-1 ring-black shadow-sm' : 'border-gray-200 hover:bg-gray-50'}`}>
-                                    <span className="text-sm font-bold text-gray-900">Blocked</span>
-                                    <input 
-                                        type="radio" 
-                                        name="status"
-                                        checked={editStatus === 'blocked'}
-                                        onChange={() => setEditStatus('blocked')}
-                                        className="w-4 h-4 text-black focus:ring-black"
-                                    />
-                                </label>
-                            </div>
-
-                             <div className="space-y-2 pt-2">
-                                <label className="text-xs font-medium text-gray-500 uppercase">Min. Nights</label>
-                                <div className="flex items-center gap-2">
-                                    <input 
-                                        type="number" 
-                                        min="1"
-                                        value={editMinStay}
-                                        onChange={e => setEditMinStay(e.target.value)}
-                                        className="w-full px-3 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 font-medium focus:ring-2 focus:ring-black outline-none shadow-sm"
-                                    />
-                                </div>
+                            <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Status</h4>
+                            <div className="flex gap-3">
+                                <button 
+                                    onClick={() => setEditStatus('available')}
+                                    className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all border ${editStatus === 'available' ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                                >
+                                    Available
+                                </button>
+                                <button 
+                                    onClick={() => setEditStatus('blocked')}
+                                    className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all border ${editStatus === 'blocked' ? 'bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                                >
+                                    Blocked
+                                </button>
                             </div>
                         </div>
-                    </div>
-                )}
 
-                {!isSelectionBooked && (
-                    <div className="p-6 border-t border-gray-200 bg-white">
                         <button 
                             onClick={handleSave}
-                            className="w-full py-3.5 bg-gray-900 text-white rounded-xl font-bold text-base hover:bg-black transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg"
+                            className="w-full py-3.5 bg-gray-900 dark:bg-white text-white dark:text-black rounded-xl font-bold text-base hover:bg-black dark:hover:bg-gray-100 transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg mt-auto"
                         >
                             Save Changes
                         </button>
-                    </div>
+                    </>
                 )}
+                </div>
             </div>
         )}
       </div>

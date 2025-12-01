@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { Property, DaySettings } from '../types';
-import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2 } from 'lucide-react';
+import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2, Dog, Clock, Ban, Calendar as CalendarIcon } from 'lucide-react';
 import { AMENITIES_LIST } from '../constants';
 import { createBooking } from '../services/bookingService';
 import { CalendarPopup } from '../components/CalendarPopup';
@@ -8,17 +9,21 @@ import { CalendarPopup } from '../components/CalendarPopup';
 interface GuestPropertyDetailsProps {
   property: Property;
   onBack: () => void;
+  onViewHost?: (hostId: string) => void;
+  hostName?: string;
+  hostAvatar?: string;
+  onBookingSuccess?: () => void;
 }
 
-export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ property, onBack }) => {
+export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ property, onBack, onViewHost, hostName = 'AI BNB', hostAvatar, onBookingSuccess }) => {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
   const [guests, setGuests] = useState(Math.min(2, property.maxGuests));
   const [isBooking, setIsBooking] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | null>(null);
+  
+  const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
 
-  // Derive Unavailable Dates (Booked or Blocked)
   const unavailableDates = new Set<string>();
   if (property.calendar) {
       Object.values(property.calendar).forEach((day: unknown) => {
@@ -29,15 +34,6 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
       });
   }
 
-  // Close popup on click outside
-  useEffect(() => {
-      const handleClickOutside = () => setActivePicker(null);
-      if (activePicker) window.addEventListener('click', handleClickOutside);
-      return () => window.removeEventListener('click', handleClickOutside);
-  }, [activePicker]);
-
-
-  // Price Calculation Logic
   const getDaysArray = (start: string, end: string) => {
     const arr = [];
     if (!start || !end) return arr;
@@ -52,12 +48,10 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
 
   const dates = getDaysArray(checkIn, checkOut);
   const totalNights = dates.length;
-
   const baseTotal = dates.reduce((acc, date) => {
       const isWeekend = date.getDay() === 0 || date.getDay() === 5 || date.getDay() === 6;
       return acc + (isWeekend ? property.baseWeekendPrice : property.baseWeekdayPrice);
   }, 0);
-
   const extraGuestFee = (guests > property.baseGuests) ? (guests - property.baseGuests) * property.extraGuestPrice * totalNights : 0;
   const serviceFee = Math.round((baseTotal + extraGuestFee) * 0.08); 
   const taxes = Math.round((baseTotal + extraGuestFee + serviceFee) * 0.18); 
@@ -65,8 +59,6 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
 
   const handleBook = async () => {
     if (!checkIn || !checkOut || totalNights < 1) return;
-
-    // Client-side overlapping check
     const requestedDates = getDaysArray(checkIn, checkOut);
     for (const d of requestedDates) {
         const dStr = d.toISOString().split('T')[0];
@@ -75,9 +67,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
             return;
         }
     }
-
     setIsBooking(true);
-    
     try {
         await createBooking({
             propertyId: property.id,
@@ -89,10 +79,10 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
             totalPrice: grandTotal,
             thumbnail: property.images[0]
         });
-        
         setShowSuccess(true);
+        if (onBookingSuccess) onBookingSuccess();
     } catch (e: any) {
-        alert(e.message || "Booking failed. Please try again.");
+        alert(e.message || "Booking failed.");
     } finally {
         setIsBooking(false);
     }
@@ -102,288 +92,236 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
 
   if (showSuccess) {
       return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fadeIn">
-              <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-2 bg-green-500"></div>
-                  <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <CheckCircle2 className="w-10 h-10 text-green-600" />
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-fadeIn">
+              <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-sm w-full text-center relative overflow-hidden shadow-2xl border border-gray-100 dark:border-gray-700">
+                  <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <CheckCircle2 className="w-10 h-10 text-green-600 dark:text-green-400" />
                   </div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Booking Confirmed!</h2>
-                  <p className="text-gray-600 mb-6">Your stay at <span className="font-semibold">{property.title}</span> is locked in.</p>
-                  
-                  <div className="bg-gray-50 rounded-xl p-4 mb-8 text-left space-y-2">
-                      <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Check-in</span>
-                          <span className="font-bold text-gray-900">{checkIn}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Check-out</span>
-                          <span className="font-bold text-gray-900">{checkOut}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Guests</span>
-                          <span className="font-bold text-gray-900">{guests}</span>
-                      </div>
-                      <div className="border-t border-gray-200 pt-2 flex justify-between font-bold text-brand-600">
-                          <span>Total Paid</span>
-                          <span>₹{grandTotal.toLocaleString()}</span>
-                      </div>
-                  </div>
-
-                  <button 
-                    onClick={onBack}
-                    className="w-full bg-gray-900 text-white py-3.5 rounded-xl font-bold hover:bg-black transition-colors"
-                  >
-                      Return to Dashboard
-                  </button>
+                  <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white mb-2">You're going!</h2>
+                  <p className="text-gray-600 dark:text-gray-300 mb-6">Reservation confirmed at <span className="font-semibold">{property.title}</span>.</p>
+                  <button onClick={onBack} className="w-full bg-gray-900 dark:bg-white text-white dark:text-black py-3.5 rounded-xl font-bold hover:bg-black dark:hover:bg-gray-100 transition-transform active:scale-95">Back to Dashboard</button>
               </div>
           </div>
       );
   }
 
+  // --- Helper for Rules Display ---
+  const renderRule = (icon: React.ElementType, title: string, desc?: string | number) => (
+      <div className="flex gap-4 items-start">
+          <div className="p-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-500 dark:text-gray-300 shrink-0">
+              {React.createElement(icon, { size: 18 })}
+          </div>
+          <div>
+              <h4 className="font-bold text-gray-900 dark:text-white text-sm">{title}</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">{desc || 'Not specified'}</p>
+          </div>
+      </div>
+  );
+
   return (
-    <div className="bg-white min-h-screen animate-fadeIn">
-      {/* Navbar Placeholder */}
-      <div className="border-b border-gray-100 py-4 px-6 md:px-12 sticky top-0 bg-white z-40 flex justify-between items-center shadow-sm">
+    <div className="bg-white dark:bg-gray-900 min-h-screen animate-fadeIn font-sans pb-32 lg:pb-0 relative transition-colors duration-300">
+      {/* Top Navigation */}
+      <div className="border-b border-gray-100 dark:border-gray-800 py-3 px-4 md:px-8 sticky top-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md z-40 flex justify-between items-center shadow-sm">
          <div className="flex items-center gap-4">
-             <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><ChevronLeft className="w-5 h-5"/></button>
-             <div className="font-bold text-xl text-brand-600">AI BNB</div>
+             <button onClick={onBack} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"><ChevronLeft className="w-5 h-5 text-gray-700 dark:text-gray-300"/></button>
          </div>
-         <div className="flex gap-4">
-             <button className="flex items-center gap-2 text-sm font-semibold hover:bg-gray-100 px-3 py-2 rounded-full"><Share2 className="w-4 h-4"/> Share</button>
-             <button className="flex items-center gap-2 text-sm font-semibold hover:bg-gray-100 px-3 py-2 rounded-full"><Heart className="w-4 h-4"/> Save</button>
+         <div className="flex gap-2">
+             <button className="flex items-center gap-2 text-sm font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 px-3 py-2 rounded-full transition-colors text-gray-700 dark:text-gray-300"><Share2 className="w-4 h-4"/> <span className="hidden sm:inline">Share</span></button>
+             <button className="flex items-center gap-2 text-sm font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 px-3 py-2 rounded-full transition-colors text-gray-700 dark:text-gray-300"><Heart className="w-4 h-4"/> <span className="hidden sm:inline">Save</span></button>
          </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-8">
-        {/* Header */}
-        <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">{property.title}</h1>
-            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                <span className="flex items-center gap-1 font-semibold text-gray-900"><Star className="w-4 h-4 fill-black"/> 4.85 · <span className="underline">12 reviews</span></span>
-                <span>·</span>
-                <span className="flex items-center gap-1"><MapPin className="w-4 h-4"/> {property.location}, {property.city}, {property.state}</span>
-            </div>
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-4 lg:py-8">
+        <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white mb-2 leading-tight">{property.title}</h1>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-6">
+            <span className="flex items-center gap-1 font-bold text-gray-900 dark:text-white"><Star className="w-3.5 h-3.5 fill-current"/> 4.85</span>
+            <span className="hidden sm:inline">·</span>
+            <span className="underline decoration-gray-300 cursor-pointer hover:text-gray-900 dark:hover:text-white">12 reviews</span>
+            <span className="hidden sm:inline">·</span>
+            <span className="flex items-center gap-1 text-gray-900 dark:text-white font-medium">{property.city}, {property.state}</span>
         </div>
 
-        {/* Hero Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 h-[400px] md:h-[500px] rounded-2xl overflow-hidden relative">
+        {/* Images Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 h-[280px] md:h-[450px] rounded-2xl overflow-hidden relative mb-10 shadow-sm">
             <div className="md:col-span-2 h-full relative group cursor-pointer">
-                <img src={property.images[0] || 'https://via.placeholder.com/800'} className="w-full h-full object-cover" alt="Main" />
-                <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
+                <img src={property.images[0] || 'https://via.placeholder.com/800'} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Main" />
             </div>
             <div className="hidden md:grid grid-cols-2 col-span-2 gap-2 h-full">
                 {property.images.slice(1, 5).map((img, i) => (
-                    <div key={i} className="h-full relative group cursor-pointer">
-                         <img src={img} className="w-full h-full object-cover" alt={`Gallery ${i}`}/>
-                         <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors"></div>
+                    <div key={i} className="h-full relative group cursor-pointer overflow-hidden">
+                         <img src={img} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt={`Gallery ${i}`}/>
                     </div>
                 ))}
             </div>
-            <button className="absolute bottom-4 right-4 bg-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md border border-gray-200">
-                Show all photos
+            <button className="absolute bottom-4 right-4 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md border border-gray-100 dark:border-gray-800 flex items-center gap-2 md:hidden">
+                View Photos
             </button>
         </div>
 
-        {/* Main Content Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 pt-4">
-            
-            {/* Left Column: Details */}
-            <div className="lg:col-span-2 space-y-10">
-                {/* Host Info */}
-                <div className="flex justify-between items-center border-b border-gray-200 pb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 relative">
+            {/* Content Column */}
+            <div className="lg:col-span-2 space-y-8">
+                {/* Host Section - CLICKABLE */}
+                <div 
+                    onClick={() => onViewHost && onViewHost(property.hostId || 'host1')}
+                    className="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-6 cursor-pointer group hover:opacity-80 transition-opacity"
+                >
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-1">Entire {property.type.toLowerCase()} hosted by AI BNB Host</h2>
-                        <ol className="flex gap-4 text-gray-600 text-sm">
-                            <li>{property.maxGuests} guests</li>
-                            <li>· {property.bedrooms} bedrooms</li>
-                            <li>· {property.bathrooms} bathrooms</li>
-                        </ol>
-                    </div>
-                    <div className="w-14 h-14 bg-gray-200 rounded-full flex items-center justify-center text-xl font-bold text-gray-500 border border-gray-300">
-                        H
-                    </div>
-                </div>
-
-                {/* Highlights */}
-                <div className="space-y-6 border-b border-gray-200 pb-8">
-                    <div className="flex gap-4">
-                        <UserCheck className="w-6 h-6 text-gray-900 mt-1"/>
-                        <div>
-                            <h3 className="font-bold text-gray-900">Dedicated Caretaker</h3>
-                            <p className="text-gray-500 text-sm">{property.caretakerAvailable ? 'A caretaker is available on-site to assist you.' : 'Self check-in available.'}</p>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1 group-hover:underline decoration-brand-500">Hosted by {hostName}</h2>
+                        <div className="flex gap-3 text-gray-500 dark:text-gray-400 text-sm">
+                            <span>{property.maxGuests} guests</span>
+                            <span>· {property.bedrooms} bedrooms</span>
+                            <span>· {property.bathrooms} baths</span>
                         </div>
                     </div>
-                    {property.poolType !== 'NA' && (
-                        <div className="flex gap-4">
-                            <ShieldCheck className="w-6 h-6 text-gray-900 mt-1"/>
-                            <div>
-                                <h3 className="font-bold text-gray-900">Private Pool</h3>
-                                <p className="text-gray-500 text-sm">Dive into your own private {property.poolSize} pool.</p>
-                            </div>
+                    {hostAvatar ? (
+                        <img src={hostAvatar} alt={hostName} className="w-12 h-12 rounded-full object-cover shadow-md border-2 border-white dark:border-gray-900 transition-transform group-hover:scale-105" />
+                    ) : (
+                        <div className="w-12 h-12 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center font-bold text-lg shadow-md border-2 border-white dark:border-gray-900 transition-transform group-hover:scale-105">
+                            {hostName.charAt(0)}
                         </div>
                     )}
                 </div>
 
-                {/* Description */}
-                <div className="border-b border-gray-200 pb-8">
-                    <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">{property.description}</p>
-                    <button className="mt-4 font-bold underline flex items-center gap-1">Show more <ChevronRight className="w-4 h-4"/></button>
+                <div className="space-y-4 text-gray-600 dark:text-gray-300 leading-relaxed border-b border-gray-100 dark:border-gray-800 pb-8 text-base">
+                    <p>{property.description}</p>
                 </div>
 
-                {/* Amenities */}
-                <div className="border-b border-gray-200 pb-8">
-                    <h2 className="text-xl font-bold text-gray-900 mb-6">What this place offers</h2>
-                    <div className="grid grid-cols-2 gap-4">
-                        {property.amenities.map(amenity => {
-                             return (
-                                <div key={amenity} className="flex items-center gap-3 text-gray-700">
-                                    <CheckCircle2 className="w-5 h-5 text-gray-400" />
-                                    <span>{amenity}</span>
+                <div className="border-b border-gray-100 dark:border-gray-800 pb-8">
+                    <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-5">Amenities</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4">
+                        {property.amenities.map(am => (
+                            <div key={am} className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
+                                <div className="p-1.5 bg-gray-50 dark:bg-gray-800 rounded-md">
+                                    <CheckCircle2 className="w-4 h-4 text-gray-400" />
                                 </div>
-                             )
-                        })}
+                                <span className="text-sm font-medium">{am}</span>
+                            </div>
+                        ))}
                     </div>
                 </div>
-
-                {/* Meals Section (AI BNB Unique) */}
-                {property.mealPlans.length > 0 && (
-                    <div className="border-b border-gray-200 pb-8 bg-orange-50 p-6 rounded-2xl border-none">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-white rounded-full text-orange-600 shadow-sm"><Utensils className="w-5 h-5"/></div>
-                            <h2 className="text-xl font-bold text-gray-900">Curated Meal Experiences</h2>
+                
+                {/* House Rules Section */}
+                <div className="pb-6">
+                    <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-6">Things to know</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-gray-50 dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
+                        <div>
+                             <h4 className="font-bold text-gray-900 dark:text-white text-sm mb-4 uppercase tracking-wider">House Rules</h4>
+                             <div className="space-y-5">
+                                {renderRule(Clock, "Check-in / Check-out", `${property.rules?.checkInTime || '14:00'} - ${property.rules?.checkOutTime || '10:00'}`)}
+                                {renderRule(Users, "Occupancy", `${property.rules?.standardOccupancy || 6} guests standard. Max ${property.rules?.maxOccupancy || 8}.`)}
+                                {renderRule(Ban, "Quiet Hours", property.rules?.quietHours)}
+                                {renderRule(Utensils, "Kitchen", property.rules?.kitchenUsagePolicy)}
+                             </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {property.mealPlans.map((plan, idx) => (
-                                <div key={idx} className="bg-white p-4 rounded-xl border border-orange-100 shadow-sm hover:shadow-md transition-shadow">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <h3 className="font-bold text-gray-800">{plan.type} Package</h3>
-                                        <span className="text-sm font-bold text-orange-600">₹{plan.pricePerHead}/head</span>
-                                    </div>
-                                    <p className="text-sm text-gray-600 mb-3">{plan.description}</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {plan.items.slice(0,3).map((item, i) => (
-                                            <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">{item}</span>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
+                        <div>
+                             <h4 className="font-bold text-gray-900 dark:text-white text-sm mb-4 uppercase tracking-wider">Policies & Fees</h4>
+                             <div className="space-y-5">
+                                {renderRule(ShieldCheck, "Security Deposit", `₹${property.rules?.securityDeposit || 0} (Refundable)`)}
+                                {renderRule(Dog, "Pets", property.rules?.petsAllowed 
+                                    ? `Allowed. Deposit: ₹${property.rules?.petDeposit || 0}` 
+                                    : "No pets allowed")}
+                                {renderRule(Ban, "Smoking", property.rules?.smokingPolicy)}
+                             </div>
                         </div>
                     </div>
-                )}
+                </div>
             </div>
 
-            {/* Right Column: Sticky Sidebar */}
-            <div className="lg:col-span-1">
-                <div className="sticky top-28 bg-white border border-gray-200 rounded-xl p-6 shadow-2xl z-10">
-                    <div className="flex justify-between items-end mb-6">
+            {/* Desktop Sticky Sidebar Booking Card */}
+            <div className="hidden lg:block lg:col-span-1">
+                <div className="sticky top-24 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl p-6 z-10">
+                    <div className="flex justify-between items-baseline mb-6">
                         <div>
-                            <span className="text-2xl font-bold">₹{property.baseWeekdayPrice}</span>
-                            <span className="text-gray-500"> / night</span>
+                            <span className="text-2xl font-bold text-gray-900 dark:text-white">₹{property.baseWeekdayPrice.toLocaleString()}</span>
+                            <span className="text-gray-500 dark:text-gray-400 text-sm"> night</span>
                         </div>
-                        <div className="flex items-center gap-1 text-sm font-semibold">
-                             <Star className="w-3 h-3 fill-black"/> 4.85
+                        <div className="flex items-center gap-1 text-xs font-bold text-gray-900 dark:text-white">
+                             <Star className="w-3 h-3 fill-current" /> 4.85
                         </div>
                     </div>
 
-                    {/* Booking Form */}
-                    <div className="border border-gray-300 rounded-xl overflow-hidden mb-4 grid grid-cols-2 shadow-sm">
-                        {/* Check-in Trigger */}
-                        <div 
-                            className="p-3 border-r border-b border-gray-300 hover:bg-gray-50 transition-colors relative cursor-pointer"
-                            onClick={(e) => { e.stopPropagation(); setActivePicker('checkIn'); }}
-                        >
-                            <label className="text-[10px] font-bold uppercase text-gray-800 block mb-0.5 pointer-events-none">Check-in</label>
-                            <div className={`text-sm font-medium ${checkIn ? 'text-gray-900' : 'text-gray-400'}`}>
-                                {checkIn || 'Add date'}
+                    <div className="space-y-4 mb-6 relative">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div 
+                                className={`p-3 rounded-xl border cursor-pointer transition-all relative ${activePicker === 'checkIn' ? 'border-black dark:border-white ring-1 ring-black dark:ring-white bg-gray-50 dark:bg-gray-700 z-30' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 z-20'}`}
+                                onClick={(e) => { e.stopPropagation(); setActivePicker('checkIn'); }}
+                            >
+                                <label className="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 block mb-0.5">Check-in</label>
+                                <div className={`text-sm font-bold truncate ${checkIn ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>{checkIn || 'Select Date'}</div>
+                                {activePicker === 'checkIn' && (
+                                    <CalendarPopup 
+                                        selectedDate={checkIn}
+                                        startDate={checkIn}
+                                        endDate={checkOut}
+                                        minDate={today}
+                                        unavailableDates={unavailableDates}
+                                        onSelect={(d) => { setCheckIn(d); if(!checkOut) setActivePicker('checkOut'); else setActivePicker(null); }}
+                                        onClose={() => setActivePicker(null)}
+                                        className="-left-2 top-[110%]"
+                                    />
+                                )}
                             </div>
-                            {activePicker === 'checkIn' && (
-                                <CalendarPopup 
-                                    selectedDate={checkIn}
-                                    startDate={checkIn}
-                                    endDate={checkOut}
-                                    minDate={today}
-                                    unavailableDates={unavailableDates}
-                                    onSelect={(d) => {
-                                        setCheckIn(d);
-                                        if (!checkOut || checkOut <= d) setActivePicker('checkOut');
-                                        else setActivePicker(null);
-                                    }}
-                                    onClose={() => setActivePicker(null)}
-                                />
-                            )}
-                        </div>
 
-                        {/* Check-out Trigger */}
-                        <div 
-                            className="p-3 border-b border-gray-300 hover:bg-gray-50 transition-colors relative cursor-pointer"
-                            onClick={(e) => { e.stopPropagation(); setActivePicker('checkOut'); }}
-                        >
-                            <label className="text-[10px] font-bold uppercase text-gray-800 block mb-0.5 pointer-events-none">Check-out</label>
-                            <div className={`text-sm font-medium ${checkOut ? 'text-gray-900' : 'text-gray-400'}`}>
-                                {checkOut || 'Add date'}
+                            <div 
+                                className={`p-3 rounded-xl border cursor-pointer transition-all relative ${activePicker === 'checkOut' ? 'border-black dark:border-white ring-1 ring-black dark:ring-white bg-gray-50 dark:bg-gray-700 z-30' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 z-20'}`}
+                                onClick={(e) => { e.stopPropagation(); setActivePicker('checkOut'); }}
+                            >
+                                <label className="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 block mb-0.5">Check-out</label>
+                                <div className={`text-sm font-bold truncate ${checkOut ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>{checkOut || 'Select Date'}</div>
+                                {activePicker === 'checkOut' && (
+                                    <CalendarPopup 
+                                        selectedDate={checkOut}
+                                        startDate={checkIn}
+                                        endDate={checkOut}
+                                        minDate={checkIn || today}
+                                        unavailableDates={unavailableDates}
+                                        onSelect={(d) => { setCheckOut(d); setActivePicker(null); }}
+                                        onClose={() => setActivePicker(null)}
+                                        className="right-0 top-[110%]"
+                                    />
+                                )}
                             </div>
-                            {activePicker === 'checkOut' && (
-                                <CalendarPopup 
-                                    selectedDate={checkOut}
-                                    startDate={checkIn}
-                                    endDate={checkOut}
-                                    minDate={checkIn || today}
-                                    unavailableDates={unavailableDates}
-                                    onSelect={(d) => {
-                                        setCheckOut(d);
-                                        setActivePicker(null);
-                                    }}
-                                    onClose={() => setActivePicker(null)}
-                                />
-                            )}
                         </div>
-
-                        <div className="col-span-2 p-3 hover:bg-gray-50 transition-colors">
-                            <label className="text-[10px] font-bold uppercase text-gray-800 block mb-0.5">Guests</label>
-                            <div className="flex justify-between items-center">
-                                <span className="text-sm font-medium">{guests} guests</span>
-                                <div className="flex items-center gap-2">
-                                    <button onClick={() => setGuests(Math.max(1, guests-1))} className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center hover:bg-white hover:border-black transition-colors">-</button>
-                                    <button onClick={() => setGuests(Math.min(property.maxGuests, guests+1))} className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center hover:bg-white hover:border-black transition-colors">+</button>
+                        
+                        <div 
+                            className={`p-3 rounded-xl border cursor-pointer flex justify-between items-center transition-all ${activePicker === 'guests' ? 'border-black dark:border-white ring-1 ring-black dark:ring-white bg-gray-50 dark:bg-gray-700 z-10' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 z-10'}`}
+                            onClick={() => setActivePicker(activePicker === 'guests' ? null : 'guests')}
+                        >
+                                <div>
+                                <label className="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 block mb-0.5">Guests</label>
+                                <div className="text-sm font-bold text-gray-900 dark:text-white">{guests} guests</div>
                                 </div>
-                            </div>
+                                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                    <button onClick={() => setGuests(Math.max(1, guests-1))} className="w-8 h-8 rounded-full border border-gray-200 dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-white disabled:opacity-50" disabled={guests <= 1}>-</button>
+                                    <button onClick={() => setGuests(Math.min(property.maxGuests, guests+1))} className="w-8 h-8 rounded-full border border-gray-200 dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-white disabled:opacity-50" disabled={guests >= property.maxGuests}>+</button>
+                                </div>
                         </div>
                     </div>
 
                     <button 
                         onClick={handleBook}
                         disabled={!totalNights || isBooking}
-                        className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl text-lg transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mb-4 flex items-center justify-center gap-2 shadow-lg hover:shadow-brand-200"
+                        className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold text-lg py-3.5 rounded-xl transition-transform active:scale-95 shadow-lg shadow-brand-200 dark:shadow-none disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2"
                     >
-                        {isBooking ? (
-                            <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</>
-                        ) : (
-                            totalNights ? 'Reserve' : 'Check availability'
-                        )}
+                        {isBooking ? <Loader2 className="w-5 h-5 animate-spin" /> : (totalNights ? 'Reserve Now' : 'Check Availability')}
                     </button>
 
                     {totalNights > 0 && (
-                        <div className="animate-fadeIn space-y-3">
-                            <div className="flex justify-between text-gray-600">
-                                <span className="underline">Base price x {totalNights} nights</span>
+                        <div className="mt-6 space-y-3 bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+                            <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
+                                <span className="underline decoration-gray-300 dark:decoration-gray-600">₹{property.baseWeekdayPrice} x {totalNights} nights</span>
                                 <span>₹{baseTotal.toLocaleString()}</span>
                             </div>
-                            {extraGuestFee > 0 && (
-                                <div className="flex justify-between text-gray-600">
-                                    <span className="underline">Extra guest fee</span>
-                                    <span>₹{extraGuestFee.toLocaleString()}</span>
-                                </div>
-                            )}
-                            <div className="flex justify-between text-gray-600">
-                                <span className="underline">Service fee</span>
+                            <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
+                                <span className="underline decoration-gray-300 dark:decoration-gray-600">Service fee</span>
                                 <span>₹{serviceFee.toLocaleString()}</span>
                             </div>
-                            <div className="flex justify-between text-gray-600">
-                                <span className="underline">Taxes (GST)</span>
+                            <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
+                                <span className="underline decoration-gray-300 dark:decoration-gray-600">Taxes</span>
                                 <span>₹{taxes.toLocaleString()}</span>
                             </div>
-                            <div className="border-t border-gray-200 pt-4 flex justify-between font-bold text-lg text-gray-900 mt-2">
+                            <div className="border-t border-gray-200 dark:border-gray-600 pt-3 flex justify-between font-bold text-gray-900 dark:text-white text-base">
                                 <span>Total</span>
                                 <span>₹{grandTotal.toLocaleString()}</span>
                             </div>
@@ -392,6 +330,49 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                 </div>
             </div>
         </div>
+      </div>
+
+      {/* Mobile Fixed Bottom Booking Bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 lg:hidden z-50 flex justify-between items-center shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.1)] pb-safe transition-colors duration-300">
+            <div onClick={() => setActivePicker('checkIn')}>
+                <div className="flex items-baseline gap-1">
+                     <span className="text-lg font-bold text-gray-900 dark:text-white">₹{property.baseWeekdayPrice.toLocaleString()}</span>
+                     <span className="text-gray-500 dark:text-gray-400 text-xs">night</span>
+                </div>
+                <div className="text-xs font-semibold text-gray-900 dark:text-gray-300 underline decoration-gray-300 dark:decoration-gray-600">
+                    {checkIn && checkOut ? `${totalNights} nights` : 'Add dates'}
+                </div>
+            </div>
+            <button 
+                onClick={handleBook}
+                className="bg-brand-600 hover:bg-brand-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg active:scale-95 disabled:opacity-50"
+            >
+                {isBooking ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Reserve'}
+            </button>
+            
+             {/* Mobile Calendar Modal Triggered by clicking left side */}
+             {(activePicker === 'checkIn' || activePicker === 'checkOut') && (
+                <div className="fixed inset-0 z-[60] bg-black/50 dark:bg-black/80" onClick={() => setActivePicker(null)}>
+                     <CalendarPopup 
+                        selectedDate={activePicker === 'checkIn' ? checkIn : checkOut}
+                        startDate={checkIn}
+                        endDate={checkOut}
+                        minDate={today}
+                        unavailableDates={unavailableDates}
+                        onSelect={(d) => {
+                            if (activePicker === 'checkIn') {
+                                setCheckIn(d);
+                                setActivePicker('checkOut');
+                            } else {
+                                setCheckOut(d);
+                                setActivePicker(null);
+                            }
+                        }}
+                        onClose={() => setActivePicker(null)}
+                        className="" 
+                    />
+                </div>
+             )}
       </div>
     </div>
   );

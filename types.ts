@@ -7,6 +7,12 @@ export enum PropertyType {
   COTTAGE = 'Cottage'
 }
 
+export enum UserRole {
+  HOST = 'host',
+  GUEST = 'guest',
+  SERVICE_PROVIDER = 'service_provider'
+}
+
 export interface Amenity {
   id: string;
   name: string;
@@ -69,12 +75,43 @@ export interface Booking {
     userId?: string; // Optional for now
 }
 
+export interface PropertyRules {
+    // I. Check-in/out
+    checkInTime: string;
+    checkOutTime: string;
+    standardOccupancy: number;
+    maxOccupancy: number;
+    extraGuestPolicy: string;
+
+    // II. Meals & Kitchen
+    chefAvailable: boolean;
+    kitchenUsagePolicy: string; // e.g. "Reheating only"
+    
+    // III. Security
+    securityDeposit: number;
+    refundPolicy: string;
+    cancellationPolicy: string;
+
+    // IV. Pets
+    petsAllowed: boolean;
+    petDeposit: number; // 10k/15k logic
+    petSanitationFee: number;
+    petPoolPolicy: string; // "Strictly not allowed"
+
+    // V. General
+    quietHours: string; // "10:00 PM to 7:00 AM"
+    smokingPolicy: string;
+    cleaningPolicy: string;
+}
+
 export interface Property {
   id: string;
   title: string;
   description: string;
   type: PropertyType;
   status: 'active' | 'draft' | 'maintenance';
+  rating?: number; // Optional rating field
+  hostId?: string; // Link to host profile
   
   // Location Details
   address: string;
@@ -100,6 +137,9 @@ export interface Property {
   mealsAvailable: boolean; // Does host provide meals?
   wifiPassword?: string;
   
+  // Detailed Rules Object
+  rules?: PropertyRules;
+
   // Staff & Logistics
   caretakerAvailable: boolean;
   caretakerName?: string;
@@ -146,4 +186,37 @@ export interface SearchCriteria {
     checkOut: string;
     adults: number;
     children: number;
+}
+
+export interface ServiceTask {
+    id: string;
+    type: 'cleaning' | 'cooking' | 'maintenance' | 'meet_greet';
+    propertyId: string;
+    propertyName: string;
+    bookingId?: string;
+    date: string;
+    time: string;
+    status: 'pending' | 'completed' | 'cancelled';
+    details: string;
+    assignedTo: string;
+}
+
+export interface AIAction {
+    type: 'NAVIGATE' | 'UPDATE_SEARCH' | 'SET_ROLE';
+    payload: any;
+}
+
+export interface HostProfile {
+    id: string;
+    name: string;
+    avatar: string;
+    isSuperhost: boolean;
+    joinedDate: string;
+    bio: string;
+    languages: string[];
+    responseRate: number;
+    responseTime: string;
+    reviewsCount: number;
+    rating: number;
+    verified: boolean;
 }
