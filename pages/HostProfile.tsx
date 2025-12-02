@@ -3,15 +3,18 @@ import React, { useState } from 'react';
 import { HostProfile } from '../types';
 import { Star, ShieldCheck, MapPin, Globe, Clock, Award, Camera, Save, ChevronLeft, X, Send, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { moderateMessage } from '../services/aiService';
+import { startConversation, sendMessage } from '../services/chatService';
+import { UserRole } from '../types';
 
 interface HostProfileProps {
     profile: HostProfile;
     isEditable?: boolean;
     onSave?: (profile: HostProfile) => void;
     onBack?: () => void;
+    currentUserId?: string; // Add this
 }
 
-export const HostProfilePage: React.FC<HostProfileProps> = ({ profile, isEditable = false, onSave, onBack }) => {
+export const HostProfilePage: React.FC<HostProfileProps> = ({ profile, isEditable = false, onSave, onBack, currentUserId = 'guest_user_1' }) => {
     const [editMode, setEditMode] = useState(false);
     const [formData, setFormData] = useState<HostProfile>(profile);
     
@@ -30,16 +33,33 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({ profile, isEditabl
         if (!messageText.trim()) return;
         setModerationStatus('checking');
         
+        // 1. Moderate
         const result = await moderateMessage(messageText);
         
         if (result.safe) {
             setModerationStatus('safe');
-            setTimeout(() => {
-                setMessageModalOpen(false);
-                setMessageText('');
+            try {
+                // 2. Start Conversation / Send Message via Service
+                const convId = await startConversation(
+                    profile.id, 
+                    currentUserId, 
+                    'Guest User', // Placeholder for current user name
+                    'https://via.placeholder.com/100', 
+                    profile.name, 
+                    profile.avatar,
+                    'Property Inquiry'
+                );
+                await sendMessage(convId, currentUserId, UserRole.GUEST, messageText);
+
+                setTimeout(() => {
+                    setMessageModalOpen(false);
+                    setMessageText('');
+                    setModerationStatus('idle');
+                }, 1500);
+            } catch (e) {
                 setModerationStatus('idle');
-                // Here you would actually send the message to Firestore
-            }, 2000);
+                alert("Failed to send message. Try again.");
+            }
         } else {
             setModerationStatus('unsafe');
             setModerationReason(result.reason);

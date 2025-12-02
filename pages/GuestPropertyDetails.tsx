@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Property, DaySettings } from '../types';
 import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2, Dog, Clock, Ban, Calendar as CalendarIcon } from 'lucide-react';
@@ -134,7 +133,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-4 lg:py-8">
         <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white mb-2 leading-tight">{property.title}</h1>
         <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-6">
-            <span className="flex items-center gap-1 font-bold text-gray-900 dark:text-white"><Star className="w-3.5 h-3.5 fill-current"/> 4.85</span>
+            <span className="flex items-center gap-1 font-bold text-gray-900 dark:text-white"><Star className="w-3.5 h-3.5 fill-current text-gold-500"/> 4.85</span>
             <span className="hidden sm:inline">·</span>
             <span className="underline decoration-gray-300 cursor-pointer hover:text-gray-900 dark:hover:text-white">12 reviews</span>
             <span className="hidden sm:inline">·</span>
@@ -237,7 +236,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                             <span className="text-gray-500 dark:text-gray-400 text-sm"> night</span>
                         </div>
                         <div className="flex items-center gap-1 text-xs font-bold text-gray-900 dark:text-white">
-                             <Star className="w-3 h-3 fill-current" /> 4.85
+                             <Star className="w-3 h-3 fill-current text-gold-500" /> 4.85
                         </div>
                     </div>
 

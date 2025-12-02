@@ -76,30 +76,21 @@ export interface Booking {
 }
 
 export interface PropertyRules {
-    // I. Check-in/out
     checkInTime: string;
     checkOutTime: string;
     standardOccupancy: number;
     maxOccupancy: number;
     extraGuestPolicy: string;
-
-    // II. Meals & Kitchen
     chefAvailable: boolean;
-    kitchenUsagePolicy: string; // e.g. "Reheating only"
-    
-    // III. Security
+    kitchenUsagePolicy: string;
     securityDeposit: number;
     refundPolicy: string;
     cancellationPolicy: string;
-
-    // IV. Pets
     petsAllowed: boolean;
-    petDeposit: number; // 10k/15k logic
+    petDeposit: number; 
     petSanitationFee: number;
-    petPoolPolicy: string; // "Strictly not allowed"
-
-    // V. General
-    quietHours: string; // "10:00 PM to 7:00 AM"
+    petPoolPolicy: string;
+    quietHours: string;
     smokingPolicy: string;
     cleaningPolicy: string;
 }
@@ -110,65 +101,45 @@ export interface Property {
   description: string;
   type: PropertyType;
   status: 'active' | 'draft' | 'maintenance';
-  rating?: number; // Optional rating field
-  hostId?: string; // Link to host profile
-  
-  // Location Details
+  rating?: number;
+  hostId?: string;
   address: string;
-  location: string; // General area name (e.g. "Koregaon Park")
+  location: string;
   city: string;
   state: string;
   country: string;
   pincode: string;
   gpsLocation: { lat: number; lng: number };
-
-  // Structure & Facilities
   bedrooms: number;
   bathrooms: number;
   poolType: 'Private' | 'Shared' | 'NA';
   poolSize?: string;
   parking: boolean;
   petFriendly: boolean;
-  
-  // Amenities & Rules
   amenities: string[];
-  kitchenAvailable: boolean; // Can guests use kitchen?
-  nonVegAllowed: boolean; // Is non-veg cooking allowed?
-  mealsAvailable: boolean; // Does host provide meals?
+  kitchenAvailable: boolean;
+  nonVegAllowed: boolean;
+  mealsAvailable: boolean;
   wifiPassword?: string;
-  
-  // Detailed Rules Object
   rules?: PropertyRules;
-
-  // Staff & Logistics
   caretakerAvailable: boolean;
   caretakerName?: string;
   caretakerNumber?: string;
   checkInTime: string;
   checkOutTime: string;
-
-  // Guests
   baseGuests: number;
   maxGuests: number;
-  
-  // Pricing
   currency: string;
   baseWeekdayPrice: number;
   baseWeekendPrice: number;
   extraGuestPrice: number;
   pricingRules: PricingRule[];
-  
-  // Calendar Overrides (Key: YYYY-MM-DD)
   calendar?: Record<string, DaySettings>;
-
-  // Content & Services
   images: string[];
   mealPlans: MealPlan[];
   addOns: AddOnService[];
   reviews?: Review[];
-
-  // Stats
-  occupancyRate: number; // 0-100 for stats
+  occupancyRate: number;
   revenueLastMonth: number;
 }
 
@@ -219,4 +190,34 @@ export interface HostProfile {
     reviewsCount: number;
     rating: number;
     verified: boolean;
+}
+
+export interface Message {
+    id: string;
+    senderId: string;
+    senderRole: UserRole; // 'host' | 'guest' | 'service_provider'
+    text: string;
+    timestamp: any; // Firestore Timestamp
+    status: 'sent' | 'delivered' | 'read' | 'blocked';
+}
+
+export interface Conversation {
+    id: string;
+    participants: string[]; // [hostId, guestId]
+    propertyId?: string;
+    propertyName?: string;
+    
+    // Denormalized data for list view
+    guestId: string;
+    guestName: string;
+    guestAvatar: string;
+    
+    hostId: string;
+    hostName: string;
+    hostAvatar: string;
+
+    lastMessage: string;
+    lastMessageTime: any;
+    unreadCount: number;
+    messages?: any[];
 }

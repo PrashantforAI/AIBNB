@@ -1,5 +1,5 @@
 
-import { Property, PropertyType, ServiceTask, HostProfile } from './types';
+import { Property, PropertyType, ServiceTask, HostProfile, Conversation } from './types';
 
 export const AI_SYSTEM_INSTRUCTION = `You are the AI Brain of AI BNB. 
 Assisting HOST. Context: {role: 'HOST'}.
@@ -105,7 +105,7 @@ export const MOCK_TASKS: ServiceTask[] = [
 
 export const MOCK_HOST_PROFILE: HostProfile = {
     id: 'host1',
-    name: 'AI BNB',
+    name: 'Pine Stays',
     avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=200',
     isSuperhost: true,
     joinedDate: 'March 2020',
@@ -117,3 +117,42 @@ export const MOCK_HOST_PROFILE: HostProfile = {
     rating: 4.9,
     verified: true
 };
+
+export const MOCK_CONVERSATIONS: Conversation[] = [
+    {
+        id: 'c1',
+        participants: ['host1', 'guest1'],
+        hostId: 'host1',
+        hostName: 'Pine Stays',
+        hostAvatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=200',
+        guestId: 'guest1',
+        guestName: 'Rahul Sharma',
+        guestAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=100',
+        propertyName: 'Saffron Villa',
+        lastMessage: 'Is early check-in possible?',
+        lastMessageTime: '10:30 AM',
+        unreadCount: 2,
+        messages: [
+            { id: 'm1', senderId: 'guest', text: 'Hi, I booked Saffron Villa for next weekend.', timestamp: '10:00 AM', status: 'read' },
+            { id: 'm2', senderId: 'guest', text: 'Is early check-in possible?', timestamp: '10:30 AM', status: 'sent' }
+        ]
+    },
+    {
+        id: 'c2',
+        participants: ['host1', 'guest2'],
+        hostId: 'host1',
+        hostName: 'Pine Stays',
+        hostAvatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=200',
+        guestId: 'guest2',
+        guestName: 'Anjali Gupta',
+        guestAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100',
+        propertyName: 'Heritage Haveli',
+        lastMessage: 'Great, thanks!',
+        lastMessageTime: 'Yesterday',
+        unreadCount: 0,
+        messages: [
+            { id: 'm1', senderId: 'host', text: 'Yes, breakfast is included.', timestamp: 'Yesterday', status: 'read' },
+            { id: 'm2', senderId: 'guest', text: 'Great, thanks!', timestamp: 'Yesterday', status: 'read' }
+        ]
+    }
+];

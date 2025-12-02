@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { Property, PropertyType, MealPlan } from '../types';
 import { generateDescription, suggestPricing } from '../services/aiService';
@@ -533,7 +532,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
             return (
                 <div className="animate-fadeIn space-y-8">
                     {/* AI Pricing Header */}
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-900 flex flex-col md:flex-row justify-between items-center shadow-sm gap-4">
+                    <div className="bg-gradient-to-r from-blue-50 to-brand-50 dark:from-blue-900/20 dark:to-brand-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-900 flex flex-col md:flex-row justify-between items-center shadow-sm gap-4">
                         <div>
                             <h4 className="font-bold text-blue-900 dark:text-blue-300 text-lg">Smart Pricing Assistant</h4>
                             <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">Get data-driven price suggestions based on market trends in {formData.city || 'your area'}.</p>
