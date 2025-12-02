@@ -4,7 +4,7 @@ import { generateDescription, suggestPricing } from '../services/aiService';
 import { 
   Wand2, Save, Plus, Trash2, IndianRupee, MapPin, 
   Home, Users, Clock, Camera, ChevronRight, ChevronLeft, Check,
-  Utensils, BedDouble, Bath, Car, Dog, Wifi, UserCheck, Droplets, Shield, FileText
+  Utensils, BedDouble, Bath, Car, Dog, Wifi, UserCheck, Droplets, Shield, FileText, Sparkles, Coffee, PartyPopper, Briefcase, Heart, Palmtree, ChefHat
 } from 'lucide-react';
 import { AMENITIES_LIST } from '../constants';
 
@@ -20,6 +20,15 @@ const STEPS = [
   { id: 3, label: 'Logistics & Rules', icon: <FileText className="w-4 h-4"/> },
   { id: 4, label: 'Guests & Pricing', icon: <IndianRupee className="w-4 h-4"/> },
   { id: 5, label: 'Photos & Content', icon: <Camera className="w-4 h-4"/> },
+];
+
+const VIBES = [
+    { id: 'Peaceful', icon: Coffee, label: 'Peaceful' },
+    { id: 'Luxury', icon: Sparkles, label: 'Luxury' },
+    { id: 'Party', icon: PartyPopper, label: 'Party Ready' },
+    { id: 'Work', icon: Briefcase, label: 'Workcation' },
+    { id: 'Romantic', icon: Heart, label: 'Romantic' },
+    { id: 'Nature', icon: Palmtree, label: 'Nature' },
 ];
 
 // Helper to compress images
@@ -128,6 +137,7 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
   const [currentStep, setCurrentStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [customAmenity, setCustomAmenity] = useState('');
+  const [propertyVibe, setPropertyVibe] = useState('Peaceful');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState<Partial<Property>>(initialData || {
@@ -189,8 +199,8 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
           return;
       }
       setIsGenerating(true);
-      const prompt = `A ${formData.type} in ${formData.city}, ${formData.state}. ${formData.bedrooms} BHK. Features: ${formData.amenities?.join(', ')}.`;
-      const desc = await generateDescription(prompt);
+      // Pass the entire formData object so the AI knows about pets, food, amenities etc.
+      const desc = await generateDescription(formData, propertyVibe);
       handleChange('description', desc);
       setIsGenerating(false);
   };
@@ -514,12 +524,11 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
                                         </Select>
                                     </div>
                                     <div className="col-span-1 md:col-span-2">
-                                        <FormLabel>Kitchen Usage Policy</FormLabel>
-                                        <Select value={formData.rules?.kitchenUsagePolicy} onChange={e => handleRuleChange('kitchenUsagePolicy', e.target.value)}>
-                                            <option value="Full Access">Full Access (Cooking allowed)</option>
-                                            <option value="Reheating only">Reheating Only (No cooking)</option>
-                                            <option value="Staff only">No Access (Staff Only)</option>
-                                        </Select>
+                                        <FormLabel>Dietary & Kitchen Policy</FormLabel>
+                                        <div className="grid grid-cols-2 gap-4 mb-4">
+                                            <ToggleCard checked={formData.nonVegAllowed || false} onChange={v => handleChange('nonVegAllowed', v)} title="Non-Veg Allowed" icon={Utensils} />
+                                            <ToggleCard checked={formData.kitchenAvailable || false} onChange={v => handleChange('kitchenAvailable', v)} title="Kitchen Access" icon={ChefHat} />
+                                        </div>
                                     </div>
                                 </div>
                              </div>
@@ -658,23 +667,56 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
                      </div>
 
                      <div className="pt-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold text-gray-800 dark:text-white">Description</h3>
+                        <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-800">
+                            <div className="flex justify-between items-center mb-6">
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                        <Sparkles className="w-5 h-5 text-indigo-500" /> 
+                                        AI Writer
+                                    </h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">I'll read your rules (Pets, Food, etc.) and write a description that fits the vibe.</p>
+                                </div>
+                            </div>
+
+                            <div className="mb-6">
+                                <label className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 tracking-wider mb-3 block">Select Vibe</label>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                                    {VIBES.map((v) => (
+                                        <button 
+                                            key={v.id}
+                                            onClick={() => setPropertyVibe(v.id)}
+                                            className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all gap-1 ${
+                                                propertyVibe === v.id 
+                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
+                                                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                                            }`}
+                                        >
+                                            <v.icon className="w-4 h-4" />
+                                            <span className="text-xs font-semibold">{v.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
                             <button 
                                 onClick={handleAiDescription} 
                                 disabled={isGenerating} 
-                                className="text-sm font-medium text-brand-600 dark:text-brand-400 flex items-center gap-1.5 hover:bg-brand-50 dark:hover:bg-brand-900/20 px-3 py-1.5 rounded-lg transition-colors border border-brand-100 dark:border-brand-900"
+                                className="w-full py-3 bg-white dark:bg-indigo-900 text-indigo-600 dark:text-indigo-200 rounded-xl font-bold shadow-sm hover:shadow-md border border-indigo-200 dark:border-indigo-700 transition-all flex items-center justify-center gap-2"
                             >
-                                <Wand2 className="w-4 h-4" /> 
-                                {isGenerating ? 'Writing...' : 'Auto-Generate'}
+                                {isGenerating ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent"></div> : <Wand2 className="w-4 h-4" />}
+                                Generate Optimized Description
                             </button>
                         </div>
-                        <TextArea 
-                            placeholder="Describe the vibe, view, and unique features of your place..."
-                            value={formData.description}
-                            onChange={e => handleChange('description', e.target.value)}
-                            rows={6}
-                        />
+
+                        <div className="mt-6">
+                             <FormLabel>Description Preview</FormLabel>
+                             <TextArea 
+                                placeholder="Description will appear here..."
+                                value={formData.description}
+                                onChange={e => handleChange('description', e.target.value)}
+                                rows={8}
+                             />
+                        </div>
                      </div>
                 </div>
              );

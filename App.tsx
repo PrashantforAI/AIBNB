@@ -143,8 +143,16 @@ function App() {
       if (action.type === 'UPDATE_SEARCH') setSearchCriteria({ ...searchCriteria, ...action.payload });
   };
 
+  // Fixed: Correctly sets activePage based on role to avoid blank screen
   const enterDashboard = () => {
       setViewMode('dashboard');
+      if (userRole === UserRole.GUEST) {
+          setActivePage('guest-dashboard');
+      } else if (userRole === UserRole.HOST) {
+          setActivePage('dashboard');
+      } else {
+          setActivePage('dashboard');
+      }
   };
 
   const handleViewHost = (hostId: string) => {
@@ -173,17 +181,22 @@ function App() {
   };
 
   const getSystemInstruction = () => {
+      const now = new Date();
+      const dateString = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      // Inject Current Date to ground the AI in reality
+      const timeContext = `\n\n[SYSTEM UPDATE]\nCURRENT SYSTEM DATE: ${dateString}\n\nINSTRUCTION: All relative dates (e.g. "next Friday", "December") refer to future dates starting from ${dateString}. Do not reference past years like 2023 or 2024 unless explicitly asked.`;
+
       if (viewMode === 'landing-chat') {
-          if (userRole === UserRole.HOST) return AI_HOST_LANDING_INSTRUCTION;
-          if (userRole === UserRole.SERVICE_PROVIDER) return AI_SERVICE_INSTRUCTION;
+          if (userRole === UserRole.HOST) return AI_HOST_LANDING_INSTRUCTION + timeContext;
+          if (userRole === UserRole.SERVICE_PROVIDER) return AI_SERVICE_INSTRUCTION + timeContext;
       }
-      return userRole === UserRole.HOST ? AI_SYSTEM_INSTRUCTION : AI_GUEST_INSTRUCTION;
+      return (userRole === UserRole.HOST ? AI_SYSTEM_INSTRUCTION : AI_GUEST_INSTRUCTION) + timeContext;
   }
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black text-gray-900 dark:text-white"><Loader2 className="w-10 h-10 animate-spin" /></div>;
 
   return (
-    <div className="text-gray-900 dark:text-gray-100 font-sans flex flex-col min-h-screen relative bg-gray-50 dark:bg-black transition-colors duration-300">
+    <div className="text-gray-900 dark:text-gray-100 font-sans flex flex-col h-screen overflow-hidden relative bg-gray-50 dark:bg-black transition-colors duration-300">
       
       {/* Toggles */}
       <div className="fixed bottom-6 left-6 z-[70] flex flex-col gap-3 group">
@@ -200,7 +213,7 @@ function App() {
           </button>
       </div>
 
-      <div className="flex-1 flex flex-col relative z-0">
+      <div className="flex-1 flex flex-col relative z-0 overflow-hidden">
         
         {/* === 1. LANDING CHAT (ALL ROLES) === */}
         {viewMode === 'landing-chat' ? (

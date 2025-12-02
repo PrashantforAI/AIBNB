@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Home, List, Calendar, Settings, LogOut, Menu, X, UserCircle, MessageSquare, Hexagon } from 'lucide-react';
 
@@ -27,14 +28,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black flex font-sans transition-colors duration-300">
+    <div className="h-full bg-gray-50 dark:bg-black flex font-sans transition-colors duration-300 overflow-hidden">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden animate-fadeIn" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed lg:sticky top-0 h-screen w-72 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl border-r border-gray-200 dark:border-white/5 z-50 transform transition-transform duration-300 ease-out lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed lg:relative top-0 h-full w-72 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl border-r border-gray-200 dark:border-white/5 z-50 transform transition-transform duration-300 ease-out lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-8 flex justify-between items-center">
             <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-brand-600 to-brand-800 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
@@ -64,7 +65,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto relative">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto relative">
         <header className="bg-white/80 dark:bg-gray-950/80 backdrop-blur-md border-b border-gray-200 dark:border-white/5 lg:hidden px-4 py-3 flex items-center gap-4 sticky top-0 z-30 transition-colors duration-300">
             <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl">
                 <Menu className="w-6 h-6" />

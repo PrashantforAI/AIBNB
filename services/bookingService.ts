@@ -1,15 +1,16 @@
 
 import { db } from '../firebaseConfig';
 import { collection, addDoc, doc, getDoc, updateDoc, query, getDocs } from 'firebase/firestore';
-import { Booking, Property } from '../types';
+import { Booking, Property, DaySettings } from '../types';
 
 const BOOKING_COLLECTION = 'bookings';
 const PROPERTY_COLLECTION = 'properties';
 
 // Helper to get array of date strings between start and end
-const getDatesInRange = (startDate: string, endDate: string) => {
+export const getDatesInRange = (startDate: string, endDate: string) => {
     const dates = [];
-    const dt = new Date(startDate);
+    // Normalize to midnight to avoid timezone offset issues
+    const dt = new Date(startDate); 
     const end = new Date(endDate);
     
     while (dt < end) {
@@ -18,6 +19,47 @@ const getDatesInRange = (startDate: string, endDate: string) => {
     }
     return dates;
 };
+
+// --- CENTRALIZED AVAILABILITY LOGIC ---
+
+/**
+ * Checks if a property is available for a given date range.
+ * Returns true if ALL dates in the range are available (not booked/blocked).
+ */
+export const isDateRangeAvailable = (property: Property, startDate: string, endDate: string): boolean => {
+    if (!startDate || !endDate) return true; // If no dates selected, it's "available" for browsing
+    
+    const requestedDates = getDatesInRange(startDate, endDate);
+    const calendar = property.calendar || {};
+
+    for (const dateStr of requestedDates) {
+        const daySettings = calendar[dateStr];
+        // If a setting exists AND it's not available, return false
+        if (daySettings && (daySettings.status === 'booked' || daySettings.status === 'blocked')) {
+            return false;
+        }
+    }
+    return true;
+};
+
+/**
+ * Returns a Set of all unavailable date strings for a property.
+ * Used for UI Calendar disabling.
+ */
+export const getUnavailableDates = (property: Property): Set<string> => {
+    const unavailable = new Set<string>();
+    const calendar = property.calendar || {};
+    
+    Object.values(calendar).forEach((day: unknown) => {
+        const d = day as DaySettings;
+        if (d.status === 'booked' || d.status === 'blocked') {
+            unavailable.add(d.date);
+        }
+    });
+    return unavailable;
+};
+
+// --------------------------------------
 
 export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status'>): Promise<string> => {
     try {

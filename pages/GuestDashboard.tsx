@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { Property, Booking, SearchCriteria, AIAction } from '../types';
 import { Compass, Calendar, Heart, Search, Sparkles, MessageSquare, Home, Waves, Crown, Tractor, Mountain, ArrowRight, Star, MapPin } from 'lucide-react';
-import { fetchGuestBookings } from '../services/bookingService';
+import { fetchGuestBookings, isDateRangeAvailable, getUnavailableDates } from '../services/bookingService';
 import { AIChat } from '../components/AIChat';
 import { CalendarPopup } from '../components/CalendarPopup';
 import { Messages } from './Messages';
@@ -23,7 +24,7 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
     onPreview,
     searchCriteria,
     setSearchCriteria,
-    context,
+    context: globalContext,
     systemInstruction,
     onBook,
     onAction
@@ -32,22 +33,30 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
   const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
   const [activeCategory, setActiveCategory] = useState('all');
 
+  // --- ROBUST FILTERING LOGIC ---
   const filteredProperties = properties.filter(p => {
+    // 1. Location Filter
     const searchLoc = searchCriteria.location.toLowerCase();
     const locMatch = !searchLoc || 
                      p.city.toLowerCase().includes(searchLoc) || 
                      p.location.toLowerCase().includes(searchLoc) ||
                      p.title.toLowerCase().includes(searchLoc);
     
+    // 2. Capacity Filter
     const totalGuests = searchCriteria.adults + searchCriteria.children;
     const capacityMatch = p.maxGuests >= totalGuests;
 
+    // 3. Date Availability Filter
+    const dateMatch = isDateRangeAvailable(p, searchCriteria.checkIn, searchCriteria.checkOut);
+
+    // 4. Category Filter
     const categoryMatch = activeCategory === 'all' || 
         (activeCategory === 'pools' && p.amenities.includes('Pool')) ||
         (activeCategory === 'luxe' && p.baseWeekdayPrice > 12000) ||
-        (activeCategory === 'farms' && p.type === 'Farmhouse');
+        (activeCategory === 'farms' && p.type === 'Farmhouse') ||
+        (activeCategory === 'views' && p.description.toLowerCase().includes('view'));
 
-    return locMatch && capacityMatch && categoryMatch;
+    return locMatch && capacityMatch && dateMatch && categoryMatch;
   });
 
   const updateSearch = (field: keyof SearchCriteria, value: any) => {
@@ -64,8 +73,32 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
       { id: 'views', label: 'Views', icon: Mountain },
   ];
 
+  // --- DYNAMIC AI CONTEXT ---
+  // We regenerate the context here so the AI sees EXACTLY what the user sees on the screen.
+  // This allows the AI to answer "Is it available?" by looking at the data we feed it.
+  const dynamicContext = JSON.stringify({
+      role: 'GUEST_EXPLORE',
+      searchCriteria: searchCriteria,
+      inventory: filteredProperties.map(p => ({
+          id: p.id,
+          title: p.title,
+          price: p.baseWeekdayPrice?.toLocaleString() || 'N/A',
+          location: p.city,
+          description: p.description?.substring(0, 150),
+          amenities: p.amenities,
+          maxGuests: p.maxGuests,
+          // CRITICAL: We pass the specific dates that are BLOCKED so the AI knows.
+          unavailableDates: Array.from(getUnavailableDates(p)),
+          petFriendly: p.petFriendly || p.rules?.petsAllowed,
+          nonVegAllowed: p.nonVegAllowed,
+          pool: p.poolType !== 'NA',
+          meals: p.mealsAvailable
+      })),
+      resultCount: filteredProperties.length
+  });
+
   return (
-    <div className="h-[calc(100vh-80px)] md:h-screen bg-gray-50 dark:bg-black font-sans transition-colors duration-300 flex flex-col overflow-hidden">
+    <div className="h-full bg-gray-50 dark:bg-black font-sans transition-colors duration-300 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="bg-white/80 dark:bg-black/80 backdrop-blur-xl sticky top-0 z-40 px-6 py-4 flex justify-between items-center border-b border-gray-100 dark:border-white/5 shrink-0">
          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('explore')}>
@@ -240,7 +273,11 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                                 <Search className="w-10 h-10 text-gray-400" />
                              </div>
                              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">No stays found</h3>
-                             <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">Adjust your filters or ask our AI Concierge.</p>
+                             <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">
+                                {searchCriteria.checkIn && searchCriteria.checkOut 
+                                    ? `No properties available between ${searchCriteria.checkIn} and ${searchCriteria.checkOut}.` 
+                                    : "Adjust your filters or ask our AI Concierge."}
+                             </p>
                              <button 
                                 onClick={() => setActiveTab('chat')}
                                 className="mt-8 px-8 py-3 bg-gradient-to-r from-brand-600 to-brand-800 text-white rounded-full font-bold shadow-lg shadow-brand-500/30 transition-transform active:scale-95 flex items-center gap-2 mx-auto"
@@ -281,7 +318,7 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                                         <p className="text-gray-500 dark:text-gray-400 text-sm line-clamp-1">{property.title}</p>
                                         <p className="text-gray-500 dark:text-gray-400 text-sm">{property.maxGuests} guests · {property.bedrooms} bedrooms</p>
                                         <div className="pt-1 flex items-baseline gap-1">
-                                            <span className="font-bold text-gray-900 dark:text-white text-lg">₹{property.baseWeekdayPrice.toLocaleString()}</span>
+                                            <span className="font-bold text-gray-900 dark:text-white text-lg">₹{property.baseWeekdayPrice?.toLocaleString() || '0'}</span>
                                             <span className="text-gray-500 dark:text-gray-400 text-sm">night</span>
                                         </div>
                                     </div>
@@ -294,12 +331,13 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
         )}
 
         {/* CHAT TAB (CONCIERGE) */}
+        {/* Pass the dynamicContext which now includes deep knowledge of the properties (blocked dates, rules) */}
         <div className={`flex-1 flex flex-col ${activeTab === 'chat' ? 'flex' : 'hidden'}`}>
              <AIChat 
                 mode="fullscreen"
-                context={context} 
+                context={dynamicContext} 
                 systemInstruction={systemInstruction} 
-                properties={properties} 
+                properties={filteredProperties} 
                 onPreview={onPreview} 
                 onBook={onBook}
                 onAction={onAction}

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Property } from '../types';
 import { MapPin, Edit, Eye, Plus, BedDouble, Users, Star, MoreHorizontal } from 'lucide-react';
@@ -70,7 +71,7 @@ export const PropertyList: React.FC<PropertyListProps> = ({ properties, onEdit, 
                         <span className="text-xs font-semibold text-gray-900 dark:text-white">{property.maxGuests} Guest</span>
                     </div>
                     <div className="bg-gray-50 dark:bg-white/5 rounded-xl p-3 text-center flex flex-col justify-center">
-                        <span className="text-xs font-bold text-gray-900 dark:text-white">₹{property.baseWeekdayPrice}</span>
+                        <span className="text-xs font-bold text-gray-900 dark:text-white">₹{property.baseWeekdayPrice?.toLocaleString() || '0'}</span>
                         <span className="text-[10px] text-gray-400">/night</span>
                     </div>
                 </div>

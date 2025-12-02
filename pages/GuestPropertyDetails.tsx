@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { Property, DaySettings } from '../types';
 import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2, Dog, Clock, Ban, Calendar as CalendarIcon } from 'lucide-react';
 import { AMENITIES_LIST } from '../constants';
-import { createBooking } from '../services/bookingService';
+import { createBooking, getUnavailableDates } from '../services/bookingService';
 import { CalendarPopup } from '../components/CalendarPopup';
 
 interface GuestPropertyDetailsProps {
@@ -23,15 +24,8 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
   
   const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
 
-  const unavailableDates = new Set<string>();
-  if (property.calendar) {
-      Object.values(property.calendar).forEach((day: unknown) => {
-          const d = day as DaySettings;
-          if (d.status === 'booked' || d.status === 'blocked') {
-              unavailableDates.add(d.date);
-          }
-      });
-  }
+  // Use centralized logic to get unavailable dates
+  const unavailableDates = getUnavailableDates(property);
 
   const getDaysArray = (start: string, end: string) => {
     const arr = [];
@@ -49,9 +43,9 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
   const totalNights = dates.length;
   const baseTotal = dates.reduce((acc, date) => {
       const isWeekend = date.getDay() === 0 || date.getDay() === 5 || date.getDay() === 6;
-      return acc + (isWeekend ? property.baseWeekendPrice : property.baseWeekdayPrice);
+      return acc + (isWeekend ? property.baseWeekendPrice || 0 : property.baseWeekdayPrice || 0);
   }, 0);
-  const extraGuestFee = (guests > property.baseGuests) ? (guests - property.baseGuests) * property.extraGuestPrice * totalNights : 0;
+  const extraGuestFee = (guests > property.baseGuests) ? (guests - property.baseGuests) * (property.extraGuestPrice || 0) * totalNights : 0;
   const serviceFee = Math.round((baseTotal + extraGuestFee) * 0.08); 
   const taxes = Math.round((baseTotal + extraGuestFee + serviceFee) * 0.18); 
   const grandTotal = baseTotal + extraGuestFee + serviceFee + taxes;
@@ -232,7 +226,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                 <div className="sticky top-24 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl p-6 z-10">
                     <div className="flex justify-between items-baseline mb-6">
                         <div>
-                            <span className="text-2xl font-bold text-gray-900 dark:text-white">₹{property.baseWeekdayPrice.toLocaleString()}</span>
+                            <span className="text-2xl font-bold text-gray-900 dark:text-white">₹{property.baseWeekdayPrice?.toLocaleString() || '0'}</span>
                             <span className="text-gray-500 dark:text-gray-400 text-sm"> night</span>
                         </div>
                         <div className="flex items-center gap-1 text-xs font-bold text-gray-900 dark:text-white">
@@ -310,19 +304,19 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                         <div className="mt-6 space-y-3 bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
                             <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
                                 <span className="underline decoration-gray-300 dark:decoration-gray-600">₹{property.baseWeekdayPrice} x {totalNights} nights</span>
-                                <span>₹{baseTotal.toLocaleString()}</span>
+                                <span>₹{baseTotal?.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
                                 <span className="underline decoration-gray-300 dark:decoration-gray-600">Service fee</span>
-                                <span>₹{serviceFee.toLocaleString()}</span>
+                                <span>₹{serviceFee?.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
                                 <span className="underline decoration-gray-300 dark:decoration-gray-600">Taxes</span>
-                                <span>₹{taxes.toLocaleString()}</span>
+                                <span>₹{taxes?.toLocaleString()}</span>
                             </div>
                             <div className="border-t border-gray-200 dark:border-gray-600 pt-3 flex justify-between font-bold text-gray-900 dark:text-white text-base">
                                 <span>Total</span>
-                                <span>₹{grandTotal.toLocaleString()}</span>
+                                <span>₹{grandTotal?.toLocaleString()}</span>
                             </div>
                         </div>
                     )}
@@ -335,7 +329,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
       <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 lg:hidden z-50 flex justify-between items-center shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.1)] pb-safe transition-colors duration-300">
             <div onClick={() => setActivePicker('checkIn')}>
                 <div className="flex items-baseline gap-1">
-                     <span className="text-lg font-bold text-gray-900 dark:text-white">₹{property.baseWeekdayPrice.toLocaleString()}</span>
+                     <span className="text-lg font-bold text-gray-900 dark:text-white">₹{property.baseWeekdayPrice?.toLocaleString() || '0'}</span>
                      <span className="text-gray-500 dark:text-gray-400 text-xs">night</span>
                 </div>
                 <div className="text-xs font-semibold text-gray-900 dark:text-gray-300 underline decoration-gray-300 dark:decoration-gray-600">

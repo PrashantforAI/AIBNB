@@ -129,6 +129,15 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
   };
 
   const selectedDatesList: string[] = Array.from(selectedDates).sort() as string[];
+  
+  // Calculate total revenue for selected duration
+  const totalSelectedRevenue = selectedDatesList.reduce((sum, dateStr) => {
+      const daySettings = selectedProperty?.calendar?.[dateStr];
+      const isWeekend = isWeekendDay(dateStr);
+      const price = daySettings?.price || (isWeekend ? selectedProperty?.baseWeekendPrice : selectedProperty?.baseWeekdayPrice) || 0;
+      return sum + price;
+  }, 0);
+
   const isSelectionBooked = selectedDatesList.length > 0 && selectedDatesList.every((d: string) => selectedProperty?.calendar?.[d]?.status === 'booked');
   
   const bookingDetails = isSelectionBooked ? {
@@ -289,7 +298,7 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
                              </div>
                              <div className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-800 pb-2">
                                 <span className="text-gray-500 dark:text-gray-400">Total Payout</span>
-                                <span className="font-bold text-gray-900 dark:text-white">₹{bookingDetails.totalPayout.toLocaleString()}</span>
+                                <span className="font-bold text-gray-900 dark:text-white">₹{bookingDetails.totalPayout?.toLocaleString() || '0'}</span>
                              </div>
                         </div>
 
@@ -300,6 +309,19 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
                 ) : (
                     // --- EDIT FORM VIEW ---
                     <>
+                        <div className="bg-brand-50 dark:bg-brand-900/20 p-5 rounded-2xl border border-brand-100 dark:border-brand-800 mb-2">
+                            <div className="flex justify-between items-start mb-2">
+                                <span className="text-xs font-bold uppercase text-brand-600 dark:text-brand-400 tracking-wider">Selection Total</span>
+                                <span className="text-2xl font-bold text-gray-900 dark:text-white">₹{totalSelectedRevenue.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="font-medium text-gray-600 dark:text-gray-300">{selectedDatesList.length} night{selectedDatesList.length !== 1 ? 's' : ''}</span>
+                                <span className="text-gray-400 dark:text-gray-500 text-xs">
+                                    {selectedDatesList.length > 0 ? `${selectedDatesList[0]} → ${selectedDatesList[selectedDatesList.length - 1]}` : ''}
+                                </span>
+                            </div>
+                        </div>
+
                         <div className="space-y-4">
                             <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Pricing</h4>
                             <div className="relative">

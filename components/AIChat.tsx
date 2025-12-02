@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { sendMessageToAI, initializeChat, parseAIResponse } from '../services/aiService';
 import { ChatMessage, Property, AIAction, UserRole } from '../types';
@@ -35,7 +36,7 @@ const ChatPropertyCard: React.FC<{ property: Property; onPreview: (p: Property) 
         </div>
         <div className="flex justify-between items-center pt-3 border-t border-gray-100 dark:border-white/5">
           <div>
-              <span className="font-bold text-lg text-gray-900 dark:text-white">₹{property.baseWeekdayPrice.toLocaleString()}</span>
+              <span className="font-bold text-lg text-gray-900 dark:text-white">₹{property.baseWeekdayPrice?.toLocaleString() || '0'}</span>
               <span className="text-xs text-gray-500 dark:text-gray-400"> / night</span>
           </div>
           <button 
@@ -98,7 +99,7 @@ const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promis
                 </div>
                 <div className="flex justify-between items-center px-1">
                     <span className="text-sm text-gray-500 dark:text-gray-400">{proposal.guests} Guests</span>
-                    <span className="text-xl font-bold text-brand-600 dark:text-brand-400">₹{proposal.totalPrice.toLocaleString()}</span>
+                    <span className="text-xl font-bold text-brand-600 dark:text-brand-400">₹{proposal.totalPrice?.toLocaleString() || '0'}</span>
                 </div>
                 <button 
                     onClick={handleConfirm}
@@ -261,7 +262,7 @@ export const AIChat: React.FC<AIChatProps> = ({
                   )}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 pb-32 scrollbar-hide">
+              <div className="flex-1 overflow-y-auto p-4 pb-40 scrollbar-hide">
                   <div className="max-w-3xl mx-auto w-full">
                   {isZeroState ? (
                       <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center space-y-8 animate-fadeIn">
