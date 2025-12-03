@@ -1,7 +1,9 @@
 
 import React, { useState } from 'react';
-import { Property, DaySettings } from '../types';
-import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Save, Check, User, MessageSquare, AlertCircle } from 'lucide-react';
+import { Property, DaySettings, Booking, UserRole } from '../types';
+import { ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Save, Check, User, MessageSquare, AlertCircle, Loader2 } from 'lucide-react';
+import { getBookingById } from '../services/bookingService';
+import { BookingDetailsModal } from '../components/BookingDetailsModal';
 
 interface CalendarManagerProps {
   properties: Property[];
@@ -20,6 +22,10 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
   const [editStatus, setEditStatus] = useState<'available' | 'blocked'>('available');
   const [editMinStay, setEditMinStay] = useState<string>('');
   const [applyWeekendsOnly, setApplyWeekendsOnly] = useState(false);
+
+  // Booking Details Modal State
+  const [fetchedBooking, setFetchedBooking] = useState<Booking | null>(null);
+  const [isLoadingBooking, setIsLoadingBooking] = useState(false);
 
   const selectedProperty = properties.find(p => p.id === selectedPropertyId);
 
@@ -47,7 +53,18 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
   };
 
   // --- Interaction Handlers ---
-  const handleDateClick = (dateStr: string, e: React.MouseEvent) => {
+  const handleDateClick = async (dateStr: string, e: React.MouseEvent) => {
+    const daySettings = selectedProperty?.calendar?.[dateStr];
+    
+    // Check if clicked a booked date -> Fetch Full Booking Logic
+    if (daySettings?.status === 'booked' && daySettings.bookingId && !e.ctrlKey && !e.shiftKey) {
+        setIsLoadingBooking(true);
+        const booking = await getBookingById(daySettings.bookingId);
+        setFetchedBooking(booking);
+        setIsLoadingBooking(false);
+        return; 
+    }
+
     const newSet = new Set<string>(e.ctrlKey || e.metaKey ? selectedDates : []);
     
     if (e.shiftKey && lastClickedDate) {
@@ -74,9 +91,7 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
     setLastClickedDate(dateStr);
 
     if (newSet.size === 1 || !e.ctrlKey) {
-        const daySettings = selectedProperty?.calendar?.[dateStr];
         const isWknd = isWeekendDay(dateStr);
-        
         setEditStatus(daySettings?.status === 'blocked' ? 'blocked' : 'available');
         setEditPrice(daySettings?.price?.toString() || (isWknd ? selectedProperty?.baseWeekendPrice.toString() : selectedProperty?.baseWeekdayPrice.toString()) || '');
         setEditMinStay(daySettings?.minStay?.toString() || '1');
@@ -98,13 +113,16 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
         const isWeekend = isWeekendDay(dateStr);
         if (applyWeekendsOnly && !isWeekend) return;
 
-        const existingStatus = newCalendar[dateStr]?.status;
+        const currentDay = newCalendar[dateStr];
+        const existingStatus = currentDay?.status;
+        
         if (existingStatus === 'booked') return; 
         
         const price = parseInt(editPrice);
         const minStay = parseInt(editMinStay);
         
         const settings: DaySettings = {
+            ...(currentDay || {}), 
             date: dateStr,
             status: editStatus as any,
         };
@@ -130,23 +148,12 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
 
   const selectedDatesList: string[] = Array.from(selectedDates).sort() as string[];
   
-  // Calculate total revenue for selected duration
   const totalSelectedRevenue = selectedDatesList.reduce((sum, dateStr) => {
       const daySettings = selectedProperty?.calendar?.[dateStr];
       const isWeekend = isWeekendDay(dateStr);
       const price = daySettings?.price || (isWeekend ? selectedProperty?.baseWeekendPrice : selectedProperty?.baseWeekdayPrice) || 0;
       return sum + price;
   }, 0);
-
-  const isSelectionBooked = selectedDatesList.length > 0 && selectedDatesList.every((d: string) => selectedProperty?.calendar?.[d]?.status === 'booked');
-  
-  const bookingDetails = isSelectionBooked ? {
-      guestName: selectedProperty?.calendar?.[selectedDatesList[0]]?.guestName || 'Unknown Guest',
-      totalPayout: selectedDatesList.reduce((sum: number, d: string) => sum + (selectedProperty?.calendar?.[d]?.price || 0), 0),
-      startDate: selectedDatesList[0],
-      endDate: selectedDatesList[selectedDatesList.length - 1],
-      nights: selectedDatesList.length
-  } : null;
 
   const renderCalendar = () => {
     const year = currentDate.getFullYear();
@@ -267,7 +274,7 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
                 <div className="p-4 md:p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900 md:bg-white md:dark:bg-gray-900">
                     <div>
                         <h3 className="font-bold text-gray-900 dark:text-white text-lg">
-                            {isSelectionBooked ? 'Booking Details' : 'Edit Selection'}
+                            Edit Selection
                         </h3>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{selectedDates.size} date{selectedDates.size > 1 ? 's' : ''} selected</p>
                     </div>
@@ -277,37 +284,7 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
                 </div>
 
                 <div className="flex-1 p-4 md:p-6 space-y-6 overflow-y-auto">
-                {isSelectionBooked && bookingDetails ? (
-                    // --- BOOKING DETAILS VIEW ---
-                    <>
-                        <div className="flex flex-col items-center py-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm relative overflow-hidden">
-                             <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-red-400 to-red-600"></div>
-                             <div className="w-16 h-16 bg-gray-50 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-700 dark:text-gray-300 mb-3 text-xl font-bold border border-gray-100 dark:border-gray-600">
-                                {bookingDetails.guestName.charAt(0)}
-                             </div>
-                             <h3 className="text-lg font-bold text-gray-900 dark:text-white">{bookingDetails.guestName}</h3>
-                             <span className="text-[10px] font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-2 py-0.5 rounded-full mt-1 border border-green-100 dark:border-green-800 flex items-center gap-1">
-                                <Check className="w-3 h-3" /> Confirmed
-                             </span>
-                        </div>
-
-                        <div className="space-y-3">
-                             <div className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-800 pb-2">
-                                <span className="text-gray-500 dark:text-gray-400">Dates</span>
-                                <span className="font-semibold text-gray-900 dark:text-white">{bookingDetails.startDate} <span className="text-gray-400 mx-1">→</span> {bookingDetails.endDate}</span>
-                             </div>
-                             <div className="flex justify-between items-center text-sm border-b border-gray-100 dark:border-gray-800 pb-2">
-                                <span className="text-gray-500 dark:text-gray-400">Total Payout</span>
-                                <span className="font-bold text-gray-900 dark:text-white">₹{bookingDetails.totalPayout?.toLocaleString() || '0'}</span>
-                             </div>
-                        </div>
-
-                        <button className="w-full py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 font-semibold rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 shadow-sm text-sm">
-                            <MessageSquare className="w-4 h-4" /> Message Guest
-                        </button>
-                    </>
-                ) : (
-                    // --- EDIT FORM VIEW ---
+                    {/* --- EDIT FORM VIEW --- */}
                     <>
                         <div className="bg-brand-50 dark:bg-brand-900/20 p-5 rounded-2xl border border-brand-100 dark:border-brand-800 mb-2">
                             <div className="flex justify-between items-start mb-2">
@@ -370,9 +347,28 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
                             Save Changes
                         </button>
                     </>
-                )}
                 </div>
             </div>
+        )}
+
+        {/* LOADING BOOKING OVERLAY */}
+        {isLoadingBooking && (
+             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+                 <Loader2 className="w-10 h-10 text-white animate-spin" />
+             </div>
+        )}
+        
+        {/* BOOKING DETAILS MODAL */}
+        {fetchedBooking && (
+            <BookingDetailsModal 
+                booking={fetchedBooking} 
+                onClose={() => setFetchedBooking(null)} 
+                userRole={UserRole.HOST}
+                onUpdate={() => {
+                    // Refresh parent if needed
+                    // In a real app we might trigger a re-fetch of property to update calendar
+                }}
+            />
         )}
       </div>
     </div>

@@ -1,10 +1,12 @@
 
+
 import React, { useState } from 'react';
-import { Property, Booking, SearchCriteria, AIAction } from '../types';
+import { Property, Booking, SearchCriteria, AIAction, UserRole } from '../types';
 import { Compass, Calendar, Heart, Search, Sparkles, MessageSquare, Home, Waves, Crown, Tractor, Mountain, ArrowRight, Star, MapPin } from 'lucide-react';
 import { fetchGuestBookings, isDateRangeAvailable, getUnavailableDates } from '../services/bookingService';
 import { AIChat } from '../components/AIChat';
 import { CalendarPopup } from '../components/CalendarPopup';
+import { BookingDetailsModal } from '../components/BookingDetailsModal';
 import { Messages } from './Messages';
 
 interface GuestDashboardProps {
@@ -73,9 +75,6 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
       { id: 'views', label: 'Views', icon: Mountain },
   ];
 
-  // --- DYNAMIC AI CONTEXT ---
-  // We regenerate the context here so the AI sees EXACTLY what the user sees on the screen.
-  // This allows the AI to answer "Is it available?" by looking at the data we feed it.
   const dynamicContext = JSON.stringify({
       role: 'GUEST_EXPLORE',
       searchCriteria: searchCriteria,
@@ -87,7 +86,6 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
           description: p.description?.substring(0, 150),
           amenities: p.amenities,
           maxGuests: p.maxGuests,
-          // CRITICAL: We pass the specific dates that are BLOCKED so the AI knows.
           unavailableDates: Array.from(getUnavailableDates(p)),
           petFriendly: p.petFriendly || p.rules?.petsAllowed,
           nonVegAllowed: p.nonVegAllowed,
@@ -299,12 +297,20 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                                             alt={property.title} 
                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                                         />
-                                        <button className="absolute top-3 right-3 p-2 rounded-full bg-black/20 backdrop-blur-md text-white/90 hover:bg-black/40 hover:scale-110 transition-all">
+                                        <button className="absolute top-3 right-3 p-2 rounded-full bg-black/20 backdrop-blur-md text-white/90 hover:bg-black/40 hover:scale-110 transition-all z-20">
                                             <Heart className="w-5 h-5 stroke-[2.5px]" />
                                         </button>
-                                        <div className="absolute top-3 left-3 bg-white/90 dark:bg-black/80 backdrop-blur px-3 py-1.5 rounded-full text-xs font-bold text-gray-900 dark:text-white shadow-sm flex items-center gap-1">
-                                            <Sparkles className="w-3 h-3 text-gold-500" /> Guest favorite
-                                        </div>
+                                        
+                                        {/* Animated Guest Favorite Badge */}
+                                        {(property.rating || 0) >= 4.8 && (
+                                            <div className="absolute top-3 left-3 overflow-hidden rounded-full bg-white/90 dark:bg-black/80 backdrop-blur shadow-sm border border-white/20 z-10">
+                                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gold-200/50 dark:via-gold-400/20 to-transparent -translate-x-full animate-shimmer" />
+                                                <div className="relative px-3 py-1.5 flex items-center gap-1">
+                                                    <Sparkles className="w-3 h-3 text-gold-500 fill-gold-500" />
+                                                    <span className="text-xs font-bold text-gray-900 dark:text-white">Guest favorite</span>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                     
                                     <div className="space-y-1">
@@ -312,7 +318,7 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                                             <h3 className="font-bold text-gray-900 dark:text-white text-base truncate">{property.city}, {property.state}</h3>
                                             <div className="flex items-center gap-1 text-sm font-semibold text-gray-900 dark:text-white">
                                                 <Star className="w-3.5 h-3.5 fill-current text-gold-500" />
-                                                <span>{property.rating || 4.85}</span>
+                                                <span>{property.rating ? property.rating.toFixed(1) : 'New'}</span>
                                             </div>
                                         </div>
                                         <p className="text-gray-500 dark:text-gray-400 text-sm line-clamp-1">{property.title}</p>
@@ -331,7 +337,6 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
         )}
 
         {/* CHAT TAB (CONCIERGE) */}
-        {/* Pass the dynamicContext which now includes deep knowledge of the properties (blocked dates, rules) */}
         <div className={`flex-1 flex flex-col ${activeTab === 'chat' ? 'flex' : 'hidden'}`}>
              <AIChat 
                 mode="fullscreen"
@@ -380,13 +385,19 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
 };
 
 const TripsView = () => {
-    const [bookings, setBookings] = React.useState<Booking[]>([]);
-    const [loading, setLoading] = React.useState(true);
+    const [bookings, setBookings] = useState<Booking[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
     
-    React.useEffect(() => {
+    const loadBookings = () => {
+        setLoading(true);
         fetchGuestBookings()
             .then(setBookings)
             .finally(() => setLoading(false));
+    };
+
+    React.useEffect(() => {
+        loadBookings();
     }, []);
 
     return (
@@ -406,7 +417,11 @@ const TripsView = () => {
                 <div className="space-y-8">
                     <div className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest pl-2">Upcoming</div>
                     {bookings.map(b => (
-                        <div key={b.id} className="flex gap-6 bg-white dark:bg-gray-900 p-5 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-xl transition-all cursor-pointer group">
+                        <div 
+                            key={b.id} 
+                            onClick={() => setSelectedBooking(b)}
+                            className="flex gap-6 bg-white dark:bg-gray-900 p-5 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-xl transition-all cursor-pointer group"
+                        >
                             <div className="w-32 h-32 rounded-2xl overflow-hidden shrink-0">
                                 <img src={b.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Trip" />
                             </div>
@@ -422,6 +437,16 @@ const TripsView = () => {
                                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Confirmed
                                         </span>
                                     )}
+                                    {b.status === 'pending' && (
+                                        <span className="text-yellow-600 dark:text-yellow-400 font-bold flex items-center gap-1.5 bg-yellow-50 dark:bg-yellow-900/20 px-3 py-1.5 rounded-lg border border-yellow-100 dark:border-yellow-900">
+                                            Pending
+                                        </span>
+                                    )}
+                                     {b.status === 'cancelled' && (
+                                        <span className="text-red-600 dark:text-red-400 font-bold flex items-center gap-1.5 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg border border-red-100 dark:border-red-900">
+                                            Cancelled
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex items-center pr-4">
@@ -432,6 +457,16 @@ const TripsView = () => {
                         </div>
                     ))}
                 </div>
+            )}
+            
+            {/* UNIVERSAL BOOKING MODAL */}
+            {selectedBooking && (
+                <BookingDetailsModal 
+                    booking={selectedBooking} 
+                    onClose={() => setSelectedBooking(null)} 
+                    userRole={UserRole.GUEST}
+                    onUpdate={loadBookings}
+                />
             )}
         </div>
     );

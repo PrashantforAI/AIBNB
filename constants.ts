@@ -100,6 +100,7 @@ export const MOCK_PROPERTIES: Property[] = [
     description: 'A 4BHK luxury villa in Lonavala with a private pool, overlooking the Sahyadri mountains. Perfect for family getaways.',
     type: PropertyType.VILLA,
     status: 'active',
+    rating: 4.92, // High rating qualifies for Guest Favorite
     address: 'Plot 45, Tungarli', location: 'Tungarli', city: 'Lonavala', state: 'Maharashtra', country: 'India', pincode: '410401',
     gpsLocation: { lat: 18.75, lng: 73.40 },
     bedrooms: 4, bathrooms: 5, poolType: 'Private', poolSize: '20x10 ft', parking: true, petFriendly: false,
@@ -118,6 +119,7 @@ export const MOCK_PROPERTIES: Property[] = [
     description: 'Restored 19th-century Haveli in the Pink City. Traditional decor with modern amenities.',
     type: PropertyType.HOMESTAY,
     status: 'active',
+    rating: 4.70, // Below 4.8 threshold, will not show Guest Favorite badge
     address: 'Old City', location: 'Pink City', city: 'Jaipur', state: 'Rajasthan', country: 'India', pincode: '302002',
     gpsLocation: { lat: 26.91, lng: 75.78 },
     bedrooms: 3, bathrooms: 3, poolType: 'NA', parking: false, petFriendly: true,

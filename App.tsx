@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { HostDashboard } from './pages/HostDashboard';
@@ -15,7 +14,7 @@ import { AIChat } from './components/AIChat';
 import { MOCK_PROPERTIES, AI_SYSTEM_INSTRUCTION, AI_GUEST_INSTRUCTION, AI_HOST_LANDING_INSTRUCTION, AI_SERVICE_INSTRUCTION, MOCK_TASKS, MOCK_HOST_PROFILE } from './constants';
 import { Property, DaySettings, Booking, SearchCriteria, UserRole, ServiceTask, AIAction, HostProfile } from './types';
 import { fetchProperties, savePropertyToDb } from './services/propertyService';
-import { createBooking } from './services/bookingService';
+import { createBooking, fetchGuestBookings, fetchPendingBookings } from './services/bookingService';
 import { startConversation, sendMessage } from './services/chatService'; 
 import { Loader2, AlertTriangle, User, ShieldCheck, Sun, Moon, Briefcase } from 'lucide-react';
 import { signInAnonymously } from 'firebase/auth';
@@ -36,6 +35,9 @@ function App() {
   const [tasks, setTasks] = useState<ServiceTask[]>(MOCK_TASKS);
   const [hostProfile, setHostProfile] = useState<HostProfile>(MOCK_HOST_PROFILE);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // New state to hold user bookings for AI context
+  const [userBookings, setUserBookings] = useState<Booking[]>([]);
 
   const currentUserId = userRole === UserRole.HOST ? 'host1' : userRole === UserRole.GUEST ? 'guest_user_1' : 'sp1';
 
@@ -69,6 +71,19 @@ function App() {
       if (data && data.length > 0) setProperties(data);
       else { await Promise.all(MOCK_PROPERTIES.map(p => savePropertyToDb(p))); setProperties(MOCK_PROPERTIES); }
 
+      // Fetch User Bookings for AI Context
+      if (userRole === UserRole.GUEST) {
+          try {
+              const bookings = await fetchGuestBookings();
+              setUserBookings(bookings);
+          } catch(e) {}
+      } else if (userRole === UserRole.HOST) {
+          try {
+              const bookings = await fetchPendingBookings();
+              setUserBookings(bookings);
+          } catch(e) {}
+      }
+
       if (userRole === UserRole.HOST || userRole === UserRole.GUEST) {
           try {
              const cid = await startConversation(
@@ -89,7 +104,7 @@ function App() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [userRole]); // Reload when role changes to get correct bookings
 
   const refreshProperties = async () => {
       try {
@@ -164,15 +179,27 @@ function App() {
   };
 
   const generateContext = () => {
+    const common = {
+        role: userRole === UserRole.HOST ? 'HOST' : 'GUEST',
+        userBookings: userBookings.map(b => ({
+            id: b.id,
+            property: b.propertyName,
+            dates: `${b.startDate} to ${b.endDate}`,
+            status: b.status,
+            code: b.bookingCode
+        }))
+    };
+
     if (viewMode === 'landing-chat') {
-        if (userRole === UserRole.HOST) return JSON.stringify({ role: 'HOST_LANDING', stats: { totalProperties: properties.length, revenue: 245000 } });
-        if (userRole === UserRole.SERVICE_PROVIDER) return JSON.stringify({ role: 'SERVICE_LANDING', pendingTasks: tasks.filter(t=>t.status==='pending').length });
+        if (userRole === UserRole.HOST) return JSON.stringify({ ...common, role: 'HOST_LANDING', stats: { totalProperties: properties.length, revenue: 245000 } });
+        if (userRole === UserRole.SERVICE_PROVIDER) return JSON.stringify({ ...common, role: 'SERVICE_LANDING', pendingTasks: tasks.filter(t=>t.status==='pending').length });
     }
 
     if (userRole === UserRole.HOST) {
-        return JSON.stringify({ role: 'HOST', portfolio: properties.map(p => ({ id: p.id, title: p.title, revenue: p.revenueLastMonth })) });
+        return JSON.stringify({ ...common, portfolio: properties.map(p => ({ id: p.id, title: p.title, revenue: p.revenueLastMonth })) });
     }
     return JSON.stringify({ 
+        ...common,
         role: 'GUEST', 
         properties: properties.map(p => ({ id: p.id, title: p.title, price: p.baseWeekdayPrice, city: p.city, amenities: p.amenities, chef: p.rules?.chefAvailable, meals: p.mealsAvailable, description: p.description?.substring(0, 100) })),
         currentView: activePage,
@@ -196,7 +223,7 @@ function App() {
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black text-gray-900 dark:text-white"><Loader2 className="w-10 h-10 animate-spin" /></div>;
 
   return (
-    <div className="text-gray-900 dark:text-gray-100 font-sans flex flex-col h-screen overflow-hidden relative bg-gray-50 dark:bg-black transition-colors duration-300">
+    <div className="text-gray-900 dark:text-gray-100 font-sans flex flex-col h-[100dvh] overflow-hidden relative bg-gray-50 dark:bg-black transition-colors duration-300">
       
       {/* Toggles */}
       <div className="fixed bottom-6 left-6 z-[70] flex flex-col gap-3 group">

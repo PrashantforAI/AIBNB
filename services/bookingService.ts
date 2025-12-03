@@ -1,6 +1,6 @@
 
 import { db } from '../firebaseConfig';
-import { collection, addDoc, doc, getDoc, updateDoc, query, getDocs } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc, query, getDocs, where } from 'firebase/firestore';
 import { Booking, Property, DaySettings } from '../types';
 
 const BOOKING_COLLECTION = 'bookings';
@@ -61,7 +61,21 @@ export const getUnavailableDates = (property: Property): Set<string> => {
 
 // --------------------------------------
 
-export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status'>): Promise<string> => {
+export const getBookingById = async (bookingId: string): Promise<Booking | null> => {
+    try {
+        const docRef = doc(db, BOOKING_COLLECTION, bookingId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { id: docSnap.id, ...docSnap.data() } as Booking;
+        }
+        return null;
+    } catch (error) {
+        console.error("Error fetching booking:", error);
+        return null;
+    }
+};
+
+export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status' | 'bookingCode' | 'paymentStatus' | 'createdAt'>): Promise<string> => {
     try {
         const datesToBlock = getDatesInRange(bookingData.startDate, bookingData.endDate);
         const propertyRef = doc(db, PROPERTY_COLLECTION, bookingData.propertyId);
@@ -84,33 +98,39 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status'>)
         }
 
         // 3. Add Booking Record
-        // Ensure thumbnail has a value and sanitize undefined fields
+        const bookingCode = `#RES-${Math.floor(1000 + Math.random() * 9000)}`;
         const rawBooking = {
             ...bookingData,
             thumbnail: bookingData.thumbnail || 'https://via.placeholder.com/300?text=No+Image',
             id: '', // Will be set by firestore
-            status: 'confirmed'
+            status: 'pending', // Default to pending for approval workflow
+            bookingCode,
+            paymentStatus: 'pending',
+            createdAt: new Date().toISOString(),
+            // Sanitize potential undefineds
+            notes: bookingData.notes || '',
+            paymentMethod: bookingData.paymentMethod || 'pay_at_property'
         };
 
-        // Remove undefined values to prevent Firestore "Unsupported field value: undefined" error
         const safeBooking = JSON.parse(JSON.stringify(rawBooking));
         
         const docRef = await addDoc(collection(db, BOOKING_COLLECTION), safeBooking);
         const bookingId = docRef.id;
 
         // 4. Update Property Calendar
+        // We block the dates as 'booked' but note it is Pending. We LINK the bookingId.
         const updatedCalendar: any = { ...currentCalendar };
         datesToBlock.forEach(dateStr => {
             updatedCalendar[dateStr] = {
                 date: dateStr,
                 status: 'booked',
                 price: currentCalendar[dateStr]?.price, // Keep existing price if set
-                guestName: 'Guest', // In real app, use auth user name
-                note: `Booking ID: ${bookingId}`
+                guestName: 'Pending Request', 
+                note: `Pending Booking ${bookingCode}`,
+                bookingId: bookingId // LINKING HERE
             };
         });
 
-        // CRITICAL FIX: Sanitize calendar to remove any undefined keys (like price if not set)
         const safeCalendar = JSON.parse(JSON.stringify(updatedCalendar));
 
         await updateDoc(propertyRef, {
@@ -120,6 +140,54 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status'>)
         return bookingId;
     } catch (error) {
         console.error("Error creating booking:", error);
+        throw error;
+    }
+};
+
+export const updateBookingStatus = async (bookingId: string, status: 'confirmed' | 'cancelled', propertyId: string, startDate: string, endDate: string) => {
+    try {
+        const bookingRef = doc(db, BOOKING_COLLECTION, bookingId);
+        await updateDoc(bookingRef, { status });
+
+        const propertyRef = doc(db, PROPERTY_COLLECTION, propertyId);
+        const propertySnap = await getDoc(propertyRef);
+        
+        if (propertySnap.exists()) {
+             const property = propertySnap.data() as Property;
+             const calendar = { ...property.calendar };
+             const dates = getDatesInRange(startDate, endDate);
+
+             if (status === 'cancelled') {
+                 // Free up dates
+                 dates.forEach(dateStr => {
+                     // Check if this date is indeed held by this booking
+                     const day = calendar[dateStr];
+                     if (day && (day.bookingId === bookingId || day.note?.includes(bookingId))) {
+                        calendar[dateStr] = {
+                            date: dateStr,
+                            status: 'available',
+                            price: day.price // Preserve price
+                            // Remove guestName, note, bookingId
+                        };
+                     }
+                 });
+             } else if (status === 'confirmed') {
+                 // Update note to remove "Pending"
+                 const booking = await getBookingById(bookingId);
+                 dates.forEach(dateStr => {
+                     if (calendar[dateStr]) {
+                         calendar[dateStr].note = `Booking ${booking?.bookingCode}`;
+                         calendar[dateStr].guestName = 'Confirmed Guest';
+                         calendar[dateStr].status = 'booked';
+                         calendar[dateStr].bookingId = bookingId;
+                     }
+                 });
+             }
+             
+             await updateDoc(propertyRef, { calendar });
+        }
+    } catch (error) {
+        console.error("Error updating booking status:", error);
         throw error;
     }
 };
@@ -135,6 +203,21 @@ export const fetchGuestBookings = async (): Promise<Booking[]> => {
         return bookings;
     } catch (error) {
         console.error("Error fetching bookings:", error);
+        return [];
+    }
+};
+
+export const fetchPendingBookings = async (): Promise<Booking[]> => {
+    try {
+        const q = query(collection(db, BOOKING_COLLECTION), where("status", "==", "pending"));
+        const querySnapshot = await getDocs(q);
+        const bookings: Booking[] = [];
+        querySnapshot.forEach((doc) => {
+            bookings.push({ id: doc.id, ...doc.data() } as Booking);
+        });
+        return bookings;
+    } catch (error) {
+        console.error("Error fetching pending bookings:", error);
         return [];
     }
 };

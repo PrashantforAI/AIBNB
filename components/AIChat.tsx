@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { sendMessageToAI, initializeChat, parseAIResponse } from '../services/aiService';
 import { ChatMessage, Property, AIAction, UserRole } from '../types';
@@ -23,9 +22,18 @@ const ChatPropertyCard: React.FC<{ property: Property; onPreview: (p: Property) 
     <div className="glass-card rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl mt-4 mb-6 w-full max-w-sm group cursor-pointer transition-all duration-300 mx-auto md:mx-0 border border-gray-100 dark:border-white/10 bg-white dark:bg-gray-900">
       <div className="h-40 bg-gray-200 dark:bg-gray-800 relative overflow-hidden">
         <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-        <div className="absolute top-3 right-3 bg-white/90 dark:bg-black/80 backdrop-blur px-2.5 py-1 rounded-full flex items-center gap-1 text-[10px] font-bold text-gray-900 dark:text-white shadow-sm border border-white/20">
-             <Star className="w-3 h-3 text-gold-500 fill-gold-500" /> 4.8
-        </div>
+        
+        {/* Animated Guest Favorite Badge */}
+        {(property.rating || 0) >= 4.8 && (
+            <div className="absolute top-3 right-3 overflow-hidden rounded-full bg-white/90 dark:bg-black/80 backdrop-blur shadow-sm border border-white/20 z-10">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gold-200/50 dark:via-gold-400/20 to-transparent -translate-x-full animate-shimmer" />
+                <div className="relative px-2.5 py-1 flex items-center gap-1">
+                    <Star className="w-3 h-3 text-gold-500 fill-gold-500" /> 
+                    <span className="text-[10px] font-bold text-gray-900 dark:text-white">Guest favorite</span>
+                </div>
+            </div>
+        )}
+
       </div>
       <div className="p-5">
         <h4 className="font-bold text-gray-900 dark:text-white text-lg line-clamp-1">{property.title}</h4>
@@ -262,7 +270,8 @@ export const AIChat: React.FC<AIChatProps> = ({
                   )}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 pb-40 scrollbar-hide">
+              {/* Message Container - Removed scrollbar-hide to ensure usability on desktop */}
+              <div className="flex-1 overflow-y-auto p-4 pb-40">
                   <div className="max-w-3xl mx-auto w-full">
                   {isZeroState ? (
                       <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center space-y-8 animate-fadeIn">
@@ -329,8 +338,10 @@ export const AIChat: React.FC<AIChatProps> = ({
               </div>
 
               {/* Minimal Floating Input */}
-              <div className="absolute bottom-8 left-0 right-0 px-4 flex justify-center z-50">
-                  <div className="w-full max-w-2xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-[2rem] shadow-2xl p-2 flex items-center gap-2 transition-all focus-within:ring-2 focus-within:ring-brand-500/30 focus-within:border-brand-500/50 hover:border-gray-300 dark:hover:border-white/20">
+              {/* pointer-events-none ensures clicking outside input falls through to list below */}
+              <div className="absolute bottom-8 left-0 right-0 px-4 flex justify-center z-50 pointer-events-none">
+                  {/* pointer-events-auto ensures the input itself works */}
+                  <div className="w-full max-w-2xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-[2rem] shadow-2xl p-2 flex items-center gap-2 transition-all focus-within:ring-2 focus-within:ring-brand-500/30 focus-within:border-brand-500/50 hover:border-gray-300 dark:hover:border-white/20 pointer-events-auto">
                       <div className="pl-4 pr-2">
                           <Zap className="w-5 h-5 text-brand-500" />
                       </div>

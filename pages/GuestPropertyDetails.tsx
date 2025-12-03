@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Property, DaySettings } from '../types';
-import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2, Dog, Clock, Ban, Calendar as CalendarIcon } from 'lucide-react';
+import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2, Dog, Clock, Ban, Calendar as CalendarIcon, X, Sparkles } from 'lucide-react';
 import { AMENITIES_LIST } from '../constants';
 import { createBooking, getUnavailableDates } from '../services/bookingService';
 import { CalendarPopup } from '../components/CalendarPopup';
@@ -20,6 +20,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
   const [checkOut, setCheckOut] = useState('');
   const [guests, setGuests] = useState(Math.min(2, property.maxGuests));
   const [isBooking, setIsBooking] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   
   const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
@@ -50,7 +51,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
   const taxes = Math.round((baseTotal + extraGuestFee + serviceFee) * 0.18); 
   const grandTotal = baseTotal + extraGuestFee + serviceFee + taxes;
 
-  const handleBook = async () => {
+  const initiateBooking = () => {
     if (!checkIn || !checkOut || totalNights < 1) return;
     const requestedDates = getDaysArray(checkIn, checkOut);
     for (const d of requestedDates) {
@@ -60,6 +61,10 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
             return;
         }
     }
+    setShowConfirmation(true);
+  };
+
+  const processBooking = async () => {
     setIsBooking(true);
     try {
         await createBooking({
@@ -72,10 +77,12 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
             totalPrice: grandTotal,
             thumbnail: property.images[0]
         });
+        setShowConfirmation(false);
         setShowSuccess(true);
         if (onBookingSuccess) onBookingSuccess();
     } catch (e: any) {
         alert(e.message || "Booking failed.");
+        setShowConfirmation(false);
     } finally {
         setIsBooking(false);
     }
@@ -87,11 +94,11 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
       return (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-fadeIn">
               <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-sm w-full text-center relative overflow-hidden shadow-2xl border border-gray-100 dark:border-gray-700">
-                  <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <CheckCircle2 className="w-10 h-10 text-green-600 dark:text-green-400" />
+                  <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <Clock className="w-10 h-10 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white mb-2">You're going!</h2>
-                  <p className="text-gray-600 dark:text-gray-300 mb-6">Reservation confirmed at <span className="font-semibold">{property.title}</span>.</p>
+                  <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white mb-2">Request Sent!</h2>
+                  <p className="text-gray-600 dark:text-gray-300 mb-6">Your booking request for <span className="font-semibold">{property.title}</span> has been sent to the host for approval.</p>
                   <button onClick={onBack} className="w-full bg-gray-900 dark:bg-white text-white dark:text-black py-3.5 rounded-xl font-bold hover:bg-black dark:hover:bg-gray-100 transition-transform active:scale-95">Back to Dashboard</button>
               </div>
           </div>
@@ -127,7 +134,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-4 lg:py-8">
         <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white mb-2 leading-tight">{property.title}</h1>
         <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-6">
-            <span className="flex items-center gap-1 font-bold text-gray-900 dark:text-white"><Star className="w-3.5 h-3.5 fill-current text-gold-500"/> 4.85</span>
+            <span className="flex items-center gap-1 font-bold text-gray-900 dark:text-white"><Star className="w-3.5 h-3.5 fill-current text-gold-500"/> {property.rating || 'New'}</span>
             <span className="hidden sm:inline">·</span>
             <span className="underline decoration-gray-300 cursor-pointer hover:text-gray-900 dark:hover:text-white">12 reviews</span>
             <span className="hidden sm:inline">·</span>
@@ -138,6 +145,17 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2 h-[280px] md:h-[450px] rounded-2xl overflow-hidden relative mb-10 shadow-sm">
             <div className="md:col-span-2 h-full relative group cursor-pointer">
                 <img src={property.images[0] || 'https://via.placeholder.com/800'} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Main" />
+                
+                {/* Animated Guest Favorite Badge */}
+                {(property.rating || 0) >= 4.8 && (
+                    <div className="absolute top-4 left-4 overflow-hidden rounded-full bg-white/90 dark:bg-black/80 backdrop-blur shadow-sm border border-white/20 z-10">
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gold-200/50 dark:via-gold-400/20 to-transparent -translate-x-full animate-shimmer" />
+                        <div className="relative px-3 py-1.5 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-gold-500 fill-gold-500" />
+                            <span className="text-xs font-bold text-gray-900 dark:text-white">Guest favorite</span>
+                        </div>
+                    </div>
+                )}
             </div>
             <div className="hidden md:grid grid-cols-2 col-span-2 gap-2 h-full">
                 {property.images.slice(1, 5).map((img, i) => (
@@ -230,7 +248,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                             <span className="text-gray-500 dark:text-gray-400 text-sm"> night</span>
                         </div>
                         <div className="flex items-center gap-1 text-xs font-bold text-gray-900 dark:text-white">
-                             <Star className="w-3 h-3 fill-current text-gold-500" /> 4.85
+                             <Star className="w-3 h-3 fill-current text-gold-500" /> {property.rating || 'New'}
                         </div>
                     </div>
 
@@ -293,11 +311,11 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                     </div>
 
                     <button 
-                        onClick={handleBook}
+                        onClick={initiateBooking}
                         disabled={!totalNights || isBooking}
                         className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold text-lg py-3.5 rounded-xl transition-transform active:scale-95 shadow-lg shadow-brand-200 dark:shadow-none disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2"
                     >
-                        {isBooking ? <Loader2 className="w-5 h-5 animate-spin" /> : (totalNights ? 'Reserve Now' : 'Check Availability')}
+                        {totalNights ? 'Request to Book' : 'Check Availability'}
                     </button>
 
                     {totalNights > 0 && (
@@ -337,10 +355,10 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                 </div>
             </div>
             <button 
-                onClick={handleBook}
+                onClick={initiateBooking}
                 className="bg-brand-600 hover:bg-brand-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg active:scale-95 disabled:opacity-50"
             >
-                {isBooking ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Reserve'}
+                Reserve
             </button>
             
              {/* Mobile Calendar Modal Triggered by clicking left side */}
@@ -367,6 +385,77 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                 </div>
              )}
       </div>
+
+      {/* CONFIRMATION MODAL */}
+      {showConfirmation && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-fadeIn">
+                <div className="bg-white dark:bg-gray-900 rounded-3xl p-6 md:p-8 max-w-md w-full relative overflow-hidden shadow-2xl border border-gray-100 dark:border-gray-700 flex flex-col max-h-[90vh]">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Review Request</h2>
+                        <button onClick={() => setShowConfirmation(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                            <X className="w-5 h-5 text-gray-500" />
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto mb-6 space-y-6">
+                        {/* Property Snippet */}
+                        <div className="flex gap-4">
+                            <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0">
+                                <img src={property.images[0]} className="w-full h-full object-cover" alt="" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900 dark:text-white line-clamp-1">{property.title}</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{property.type} in {property.city}</p>
+                                <div className="flex items-center gap-1 text-xs font-bold text-gray-900 dark:text-white mt-1">
+                                    <Star className="w-3 h-3 fill-current text-gold-500" /> 4.85
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Trip Details */}
+                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 space-y-3">
+                            <div className="flex justify-between items-center">
+                                <div className="text-sm text-gray-500 dark:text-gray-400">Dates</div>
+                                <div className="text-sm font-semibold text-gray-900 dark:text-white">{checkIn} → {checkOut}</div>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <div className="text-sm text-gray-500 dark:text-gray-400">Guests</div>
+                                <div className="text-sm font-semibold text-gray-900 dark:text-white">{guests} guests</div>
+                            </div>
+                        </div>
+
+                        {/* Price Breakdown */}
+                        <div className="space-y-3">
+                            <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
+                                <span>₹{property.baseWeekdayPrice} x {totalNights} nights</span>
+                                <span>₹{baseTotal?.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
+                                <span>Service fee</span>
+                                <span>₹{serviceFee?.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
+                                <span>Taxes</span>
+                                <span>₹{taxes?.toLocaleString()}</span>
+                            </div>
+                            <div className="border-t border-gray-200 dark:border-gray-700 pt-3 flex justify-between items-center">
+                                <span className="font-bold text-gray-900 dark:text-white">Total (INR)</span>
+                                <span className="font-extrabold text-xl text-brand-600 dark:text-brand-400">₹{grandTotal?.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={processBooking}
+                        disabled={isBooking}
+                        className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl transition-transform active:scale-95 shadow-lg flex items-center justify-center gap-2"
+                    >
+                        {isBooking ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Request to Book'}
+                    </button>
+                    <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-3">You won't be charged yet.</p>
+                </div>
+            </div>
+      )}
     </div>
   );
 };

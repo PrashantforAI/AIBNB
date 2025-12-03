@@ -51,6 +51,7 @@ export interface DaySettings {
   minStay?: number;
   note?: string; // e.g., "Blocked for painting"
   guestName?: string; // For booked dates
+  bookingId?: string; // Link to the actual booking document
 }
 
 export interface Review {
@@ -63,6 +64,7 @@ export interface Review {
 
 export interface Booking {
     id: string;
+    bookingCode: string; // e.g., #RES-8832
     propertyId: string;
     propertyName: string;
     location: string;
@@ -71,8 +73,15 @@ export interface Booking {
     guestCount: number;
     totalPrice: number;
     status: 'confirmed' | 'pending' | 'cancelled';
+    paymentStatus: 'paid' | 'pending' | 'refunded' | 'failed';
+    paymentMethod?: 'credit_card' | 'upi' | 'pay_at_property';
+    createdAt: string; // ISO String
     thumbnail: string;
-    userId?: string; // Optional for now
+    userId?: string; 
+    hostId?: string;
+    checkInTime?: string;
+    checkOutTime?: string;
+    notes?: string;
 }
 
 export interface PropertyRules {

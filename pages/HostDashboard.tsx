@@ -1,6 +1,7 @@
-import React from 'react';
-import { Property } from '../types';
-import { BarChart, Activity, IndianRupee, Users, Calendar, ArrowUpRight, Sparkles } from 'lucide-react';
+
+import React, { useState, useEffect } from 'react';
+import { Property, Booking } from '../types';
+import { BarChart, Activity, IndianRupee, Users, Calendar, ArrowUpRight, Sparkles, CheckCircle2, Star, Wrench, Clock, Check, X, Loader2 } from 'lucide-react';
 import {
   BarChart as RechartsBarChart,
   Bar,
@@ -11,15 +12,47 @@ import {
   Cell,
   CartesianGrid
 } from 'recharts';
+import { fetchPendingBookings, updateBookingStatus } from '../services/bookingService';
 
 interface HostDashboardProps {
   properties: Property[];
   onNavigate: (page: string) => void;
 }
 
+const RECENT_ACTIVITY = [
+    { id: 1, type: 'booking', title: 'New Booking', desc: 'Rahul S. • Saffron Villa', time: '2m ago', icon: Calendar, color: 'text-brand-500 bg-brand-50 dark:bg-brand-900/20' },
+    { id: 2, type: 'price', title: 'Price Update', desc: 'Weekend surge active', time: '1h ago', icon: IndianRupee, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' },
+    { id: 3, type: 'review', title: '5-Star Review', desc: 'Anjali G. • Heritage Haveli', time: '3h ago', icon: Star, color: 'text-gold-500 bg-gold-50 dark:bg-gold-900/20' },
+    { id: 4, type: 'maintenance', title: 'Maintenance', desc: 'Pool cleaning completed', time: '5h ago', icon: Wrench, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' },
+];
+
 export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavigate }) => {
   const totalRevenue = properties.reduce((sum, p) => sum + p.revenueLastMonth, 0);
   const avgOccupancy = Math.round(properties.reduce((sum, p) => sum + p.occupancyRate, 0) / (properties.length || 1));
+  
+  const [pendingBookings, setPendingBookings] = useState<Booking[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  useEffect(() => {
+      fetchPendingBookings().then(bookings => {
+          // Filter to show only bookings for properties this host owns
+          const myPropertyIds = properties.map(p => p.id);
+          setPendingBookings(bookings.filter(b => myPropertyIds.includes(b.propertyId)));
+      }).finally(() => setLoadingRequests(false));
+  }, [properties]);
+
+  const handleRequestAction = async (booking: Booking, status: 'confirmed' | 'cancelled') => {
+      setProcessingId(booking.id);
+      try {
+          await updateBookingStatus(booking.id, status, booking.propertyId, booking.startDate, booking.endDate);
+          setPendingBookings(prev => prev.filter(b => b.id !== booking.id));
+      } catch (e) {
+          alert("Failed to update status");
+      } finally {
+          setProcessingId(null);
+      }
+  };
   
   const chartData = properties.map(p => ({
     name: p.title.length > 12 ? p.title.substring(0, 10) + '...' : p.title,
@@ -42,6 +75,78 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
             Live Updates
         </div>
       </header>
+
+      {/* Booking Requests Section */}
+      <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-6 bg-brand-500 rounded-full"></div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Booking Requests</h2>
+              {pendingBookings.length > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">{pendingBookings.length}</span>
+              )}
+          </div>
+          
+          {loadingRequests ? (
+              <div className="flex items-center gap-2 text-gray-500 p-4"><Loader2 className="w-5 h-5 animate-spin"/> Loading requests...</div>
+          ) : pendingBookings.length === 0 ? (
+              <div className="bg-white dark:bg-gray-800/50 p-6 rounded-2xl border border-gray-100 dark:border-white/5 flex items-center justify-center text-gray-400 dark:text-gray-500 italic text-sm">
+                  No pending booking requests.
+              </div>
+          ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pendingBookings.map(booking => (
+                      <div key={booking.id} className="bg-white dark:bg-gray-800/80 backdrop-blur-sm p-5 rounded-2xl border border-brand-100 dark:border-brand-900/30 shadow-lg shadow-brand-100/20 dark:shadow-none transition-all hover:scale-[1.01]">
+                          <div className="flex justify-between items-start mb-4">
+                              <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-brand-100 dark:bg-brand-900/50 flex items-center justify-center text-brand-700 dark:text-brand-300 font-bold">
+                                      {booking.guestCount}
+                                  </div>
+                                  <div>
+                                      <h3 className="font-bold text-gray-900 dark:text-white text-sm line-clamp-1">{booking.propertyName}</h3>
+                                      <p className="text-xs text-gray-500 dark:text-gray-400">Request ID: #{booking.id.slice(-4)}</p>
+                                  </div>
+                              </div>
+                              <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">
+                                  Pending
+                              </span>
+                          </div>
+                          
+                          <div className="bg-gray-50 dark:bg-black/20 rounded-xl p-3 mb-4 space-y-2">
+                              <div className="flex justify-between text-sm">
+                                  <span className="text-gray-500 dark:text-gray-400">Dates</span>
+                                  <span className="font-semibold text-gray-900 dark:text-white">{booking.startDate} <span className="text-gray-400">→</span> {booking.endDate}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                  <span className="text-gray-500 dark:text-gray-400">Guests</span>
+                                  <span className="font-semibold text-gray-900 dark:text-white">{booking.guestCount} People</span>
+                              </div>
+                              <div className="flex justify-between text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
+                                  <span className="font-bold text-gray-600 dark:text-gray-300">Total Payout</span>
+                                  <span className="font-bold text-lg text-emerald-600 dark:text-emerald-400">₹{booking.totalPrice?.toLocaleString()}</span>
+                              </div>
+                          </div>
+
+                          <div className="flex gap-3">
+                              <button 
+                                onClick={() => handleRequestAction(booking, 'cancelled')}
+                                disabled={processingId === booking.id}
+                                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                              >
+                                  <X className="w-4 h-4" /> Decline
+                              </button>
+                              <button 
+                                onClick={() => handleRequestAction(booking, 'confirmed')}
+                                disabled={processingId === booking.id}
+                                className="flex-1 py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black font-semibold hover:bg-black dark:hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 text-sm shadow-md disabled:opacity-50"
+                              >
+                                  {processingId === booking.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4" />} Approve
+                              </button>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          )}
+      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
@@ -128,39 +233,73 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
           </div>
         </div>
 
-        {/* AI Insight Card */}
-        <div className="relative group overflow-hidden rounded-3xl">
-          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black dark:from-gray-800 dark:to-black opacity-100"></div>
-          <div className="absolute top-0 right-0 p-32 bg-brand-600 rounded-full blur-[100px] opacity-20 -translate-y-1/2 translate-x-1/2 group-hover:opacity-30 transition-opacity duration-500"></div>
-          
-          <div className="relative z-10 p-8 flex flex-col h-full">
-            <div className="flex items-center gap-2 mb-6">
-                <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
-                    <Sparkles className="w-5 h-5 text-brand-300" />
+        {/* Right Column: AI Insights + Activity Feed */}
+        <div className="space-y-6">
+            {/* AI Insight Card */}
+            <div className="relative group overflow-hidden rounded-3xl min-h-[280px]">
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black dark:from-gray-800 dark:to-black opacity-100"></div>
+              <div className="absolute top-0 right-0 p-32 bg-brand-600 rounded-full blur-[100px] opacity-20 -translate-y-1/2 translate-x-1/2 group-hover:opacity-30 transition-opacity duration-500"></div>
+              
+              <div className="relative z-10 p-8 flex flex-col h-full">
+                <div className="flex items-center gap-2 mb-6">
+                    <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                        <Sparkles className="w-5 h-5 text-brand-300" />
+                    </div>
+                    <h2 className="text-xl font-bold text-white">AI Insights</h2>
                 </div>
-                <h2 className="text-xl font-bold text-white">AI Insights</h2>
+                
+                <div className="space-y-4 flex-1">
+                    <InsightItem 
+                        title="Diwali Demand Spike" 
+                        desc="Search volume up 40%. Consider raising rates by 15%."
+                        trend="up"
+                    />
+                    <InsightItem 
+                        title="WiFi Issue Detected" 
+                        desc="Sentiment analysis flagged 2 recent reviews."
+                        trend="down"
+                    />
+                </div>
+                
+                <button 
+                    onClick={() => onNavigate('listings')}
+                    className="mt-6 w-full py-3.5 bg-white text-gray-950 rounded-xl hover:bg-gray-100 text-sm font-bold transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                >
+                    Take Action <ArrowUpRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            
-            <div className="space-y-4 flex-1">
-                <InsightItem 
-                    title="Diwali Demand Spike" 
-                    desc="Search volume up 40%. Consider raising rates by 15% for Nov 10-15."
-                    trend="up"
-                />
-                <InsightItem 
-                    title="WiFi Issue Detected" 
-                    desc="Sentiment analysis flagged 2 recent reviews mentioning slow internet."
-                    trend="down"
-                />
+
+            {/* Recent Activity Feed */}
+            <div className="glass-card rounded-3xl p-6">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-brand-500" />
+                        Activity Feed
+                    </h3>
+                    <button className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">View All</button>
+                </div>
+                <div className="space-y-6">
+                    {RECENT_ACTIVITY.map((item, i) => (
+                        <div key={item.id} className="flex gap-4 relative">
+                            {/* Connector Line */}
+                            {i !== RECENT_ACTIVITY.length - 1 && (
+                                <div className="absolute left-[19px] top-10 bottom-[-24px] w-0.5 bg-gray-100 dark:bg-white/5"></div>
+                            )}
+                            <div className={`w-10 h-10 rounded-full shrink-0 flex items-center justify-center border border-white/10 ${item.color} shadow-sm z-10`}>
+                                <item.icon className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1 pt-1">
+                                <div className="flex justify-between items-start">
+                                    <h4 className="font-bold text-gray-900 dark:text-white text-sm">{item.title}</h4>
+                                    <span className="text-[10px] font-medium text-gray-400">{item.time}</span>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">{item.desc}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
-            
-            <button 
-                onClick={() => onNavigate('listings')}
-                className="mt-6 w-full py-3.5 bg-white text-gray-950 rounded-xl hover:bg-gray-100 text-sm font-bold transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
-            >
-                Take Action <ArrowUpRight className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </div>
     </div>
