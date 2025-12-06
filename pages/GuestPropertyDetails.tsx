@@ -13,9 +13,11 @@ interface GuestPropertyDetailsProps {
   hostName?: string;
   hostAvatar?: string;
   onBookingSuccess?: () => void;
+  guestName?: string;
+  guestAvatar?: string; 
 }
 
-export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ property, onBack, onViewHost, hostName = 'AI BNB', hostAvatar, onBookingSuccess }) => {
+export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ property, onBack, onViewHost, hostName = 'Pine Stays', hostAvatar, onBookingSuccess, guestName = 'Guest', guestAvatar }) => {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
   const [guests, setGuests] = useState(Math.min(2, property.maxGuests));
@@ -25,7 +27,6 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
   
   const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
 
-  // Use centralized logic to get unavailable dates
   const unavailableDates = getUnavailableDates(property);
 
   const getDaysArray = (start: string, end: string) => {
@@ -74,6 +75,10 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
             startDate: checkIn,
             endDate: checkOut,
             guestCount: guests,
+            guestName: guestName,
+            guestAvatar: guestAvatar,
+            hostName: hostName,
+            hostAvatar: hostAvatar,
             totalPrice: grandTotal,
             thumbnail: property.images[0]
         });
@@ -89,7 +94,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
   };
 
   const today = new Date().toISOString().split('T')[0];
-
+  
   if (showSuccess) {
       return (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-fadeIn">
@@ -105,7 +110,6 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
       );
   }
 
-  // --- Helper for Rules Display ---
   const renderRule = (icon: React.ElementType, title: string, desc?: string | number) => (
       <div className="flex gap-4 items-start">
           <div className="p-2 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-500 dark:text-gray-300 shrink-0">
@@ -119,7 +123,8 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
   );
 
   return (
-    <div className="bg-white dark:bg-gray-900 min-h-screen animate-fadeIn font-sans pb-32 lg:pb-0 relative transition-colors duration-300">
+    // FIXED: Used absolute positioning to force filling parent container for scroll reliability
+    <div className="absolute inset-0 bg-white dark:bg-gray-900 overflow-y-auto animate-fadeIn font-sans pb-40 lg:pb-20 transition-colors duration-300">
       {/* Top Navigation */}
       <div className="border-b border-gray-100 dark:border-gray-800 py-3 px-4 md:px-8 sticky top-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md z-40 flex justify-between items-center shadow-sm">
          <div className="flex items-center gap-4">
@@ -146,7 +151,6 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
             <div className="md:col-span-2 h-full relative group cursor-pointer">
                 <img src={property.images[0] || 'https://via.placeholder.com/800'} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Main" />
                 
-                {/* Animated Guest Favorite Badge */}
                 {(property.rating || 0) >= 4.8 && (
                     <div className="absolute top-4 left-4 overflow-hidden rounded-full bg-white/90 dark:bg-black/80 backdrop-blur shadow-sm border border-white/20 z-10">
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gold-200/50 dark:via-gold-400/20 to-transparent -translate-x-full animate-shimmer" />
@@ -164,15 +168,10 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                     </div>
                 ))}
             </div>
-            <button className="absolute bottom-4 right-4 bg-white dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md border border-gray-100 dark:border-gray-800 flex items-center gap-2 md:hidden">
-                View Photos
-            </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 relative">
-            {/* Content Column */}
             <div className="lg:col-span-2 space-y-8">
-                {/* Host Section - CLICKABLE */}
                 <div 
                     onClick={() => onViewHost && onViewHost(property.hostId || 'host1')}
                     className="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-6 cursor-pointer group hover:opacity-80 transition-opacity"
@@ -212,7 +211,6 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                     </div>
                 </div>
                 
-                {/* House Rules Section */}
                 <div className="pb-6">
                     <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-6">Things to know</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-gray-50 dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
@@ -239,7 +237,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                 </div>
             </div>
 
-            {/* Desktop Sticky Sidebar Booking Card */}
+            {/* Sticky Sidebar */}
             <div className="hidden lg:block lg:col-span-1">
                 <div className="sticky top-24 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl p-6 z-10">
                     <div className="flex justify-between items-baseline mb-6">
@@ -343,7 +341,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
         </div>
       </div>
 
-      {/* Mobile Fixed Bottom Booking Bar */}
+      {/* Mobile Sticky Booking Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4 lg:hidden z-50 flex justify-between items-center shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.1)] pb-safe transition-colors duration-300">
             <div onClick={() => setActivePicker('checkIn')}>
                 <div className="flex items-baseline gap-1">
@@ -361,7 +359,6 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                 Reserve
             </button>
             
-             {/* Mobile Calendar Modal Triggered by clicking left side */}
              {(activePicker === 'checkIn' || activePicker === 'checkOut') && (
                 <div className="fixed inset-0 z-[60] bg-black/50 dark:bg-black/80" onClick={() => setActivePicker(null)}>
                      <CalendarPopup 
@@ -386,7 +383,6 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
              )}
       </div>
 
-      {/* CONFIRMATION MODAL */}
       {showConfirmation && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-fadeIn">
                 <div className="bg-white dark:bg-gray-900 rounded-3xl p-6 md:p-8 max-w-md w-full relative overflow-hidden shadow-2xl border border-gray-100 dark:border-gray-700 flex flex-col max-h-[90vh]">
@@ -398,7 +394,6 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                     </div>
 
                     <div className="flex-1 overflow-y-auto mb-6 space-y-6">
-                        {/* Property Snippet */}
                         <div className="flex gap-4">
                             <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0">
                                 <img src={property.images[0]} className="w-full h-full object-cover" alt="" />
@@ -407,12 +402,11 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                                 <h3 className="font-bold text-gray-900 dark:text-white line-clamp-1">{property.title}</h3>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">{property.type} in {property.city}</p>
                                 <div className="flex items-center gap-1 text-xs font-bold text-gray-900 dark:text-white mt-1">
-                                    <Star className="w-3 h-3 fill-current text-gold-500" /> 4.85
+                                    <Star className="w-3 h-3 fill-current text-gold-500" /> {property.rating || 'New'}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Trip Details */}
                         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 space-y-3">
                             <div className="flex justify-between items-center">
                                 <div className="text-sm text-gray-500 dark:text-gray-400">Dates</div>
@@ -424,7 +418,6 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                             </div>
                         </div>
 
-                        {/* Price Breakdown */}
                         <div className="space-y-3">
                             <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
                                 <span>₹{property.baseWeekdayPrice} x {totalNights} nights</span>

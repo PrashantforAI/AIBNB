@@ -1,5 +1,7 @@
 
 
+
+
 import { Property, PropertyType, ServiceTask, HostProfile, Conversation } from './types';
 
 export const AI_SYSTEM_INSTRUCTION = `You are the AI Brain of AI BNB. 
@@ -53,15 +55,27 @@ You have access to a JSON object called 'context'. This contains:
    - Be helpful, warm, and sophisticated.
    - Explain **WHY** you are recommending a place: "I recommend Saffron Villa because it accommodates your group of 6 and allows pets..."
    - Use [PROPERTY: id] to display the card.
-   - Use [BOOKING_INTENT: {...}] only when they clearly say "Book it" or "Confirm reservation".
+   
+5. **BOOKING INTENT & JSON FORMAT (CRITICAL)**:
+   - Use [BOOKING_INTENT: JSON_PAYLOAD] ONLY when the user clearly confirms they want to book or proceed with a specific property.
+   - **JSON_PAYLOAD SCHEMA**:
+     {
+       "propertyId": "string",
+       "propertyName": "string",
+       "startDate": "YYYY-MM-DD",  // MUST be extracted from conversation or context. NEVER leave empty.
+       "endDate": "YYYY-MM-DD",    // MUST be extracted from conversation or context. NEVER leave empty.
+       "guests": number,
+       "totalPrice": number
+     }
+   - **MANDATORY**: You MUST convert natural language dates (e.g. "next friday") into YYYY-MM-DD format for 'startDate' and 'endDate' inside the JSON.
 
 **SCENARIO EXAMPLES**:
 - User: "Is Saffron Villa available Dec 25?"
 - You (Internal): Check 'unavailableDates' for '2025-12-25' (Assuming 2025 is current year). It is present.
 - You: "I'm sorry, Saffron Villa is already booked for Christmas. However, Heritage Haveli is available. Would you like to see that?"
 
-- User: "I want a place with a pool."
-- You: "I can certainly help with that. To find the perfect match, could you let me know your planned dates and the number of guests?"
+- User: "Book Saffron Villa for 6 people on Dec 7th to Dec 9th"
+- You: "Great choice! I've prepared the booking details for Saffron Villa for Dec 7-9. [BOOKING_INTENT: {"propertyId": "1", "propertyName": "Saffron Villa", "startDate": "2025-12-07", "endDate": "2025-12-09", "guests": 6, "totalPrice": 30000}]"
 `;
 
 export const AI_SERVICE_INSTRUCTION = `You are the Field Operations AI.
@@ -131,6 +145,25 @@ export const MOCK_PROPERTIES: Property[] = [
     images: ['https://images.unsplash.com/photo-1599643478518-17488fbbcd75?q=80&w=2574&auto=format&fit=crop'],
     mealPlans: [], addOns: [], pricingRules: [], calendar: {}, reviews: [], occupancyRate: 65, revenueLastMonth: 85000,
     hostId: 'host1'
+  },
+  {
+      id: '3',
+      title: 'Mannat - Sea View Villa',
+      description: 'Experience luxury by the sea. A stunning 5BHK villa with direct beach access and panoramic ocean views.',
+      type: PropertyType.VILLA,
+      status: 'active',
+      rating: 4.95,
+      address: 'Beach Road', location: 'Alibaug', city: 'Alibaug', state: 'Maharashtra', country: 'India', pincode: '402201',
+      gpsLocation: { lat: 18.64, lng: 72.87 },
+      bedrooms: 5, bathrooms: 6, poolType: 'Private', poolSize: '25x12 ft', parking: true, petFriendly: true,
+      amenities: ['Pool', 'Wifi', 'AC', 'Beach Access', 'Caretaker', 'BBQ'],
+      kitchenAvailable: true, nonVegAllowed: true, mealsAvailable: true,
+      caretakerAvailable: true, caretakerName: 'Suresh', checkInTime: '14:00', checkOutTime: '11:00',
+      baseGuests: 10, maxGuests: 15, currency: 'INR', baseWeekdayPrice: 25000, baseWeekendPrice: 35000, extraGuestPrice: 2000,
+      rules: { ...STANDARD_RULES, petsAllowed: true },
+      images: ['https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=2670&auto=format&fit=crop'],
+      mealPlans: [], addOns: [], pricingRules: [], calendar: {}, reviews: [], occupancyRate: 85, revenueLastMonth: 450000,
+      hostId: 'host1'
   }
 ];
 

@@ -59,12 +59,19 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
     // Check if clicked a booked date -> Fetch Full Booking Logic
     if (daySettings?.status === 'booked' && daySettings.bookingId && !e.ctrlKey && !e.shiftKey) {
         setIsLoadingBooking(true);
-        const booking = await getBookingById(daySettings.bookingId);
-        setFetchedBooking(booking);
-        setIsLoadingBooking(false);
+        try {
+            const booking = await getBookingById(daySettings.bookingId);
+            if (booking) setFetchedBooking(booking);
+            else alert("Booking details not found.");
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setIsLoadingBooking(false);
+        }
         return; 
     }
 
+    // Normal Selection Logic
     const newSet = new Set<string>(e.ctrlKey || e.metaKey ? selectedDates : []);
     
     if (e.shiftKey && lastClickedDate) {
@@ -116,6 +123,7 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
         const currentDay = newCalendar[dateStr];
         const existingStatus = currentDay?.status;
         
+        // Safety: Do not overwrite a booking with manual block/avail status
         if (existingStatus === 'booked') return; 
         
         const price = parseInt(editPrice);
@@ -176,10 +184,24 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
       const status = daySettings?.status || 'available';
       const price = daySettings?.price || (isWeekend ? selectedProperty?.baseWeekendPrice : selectedProperty?.baseWeekdayPrice);
       const guestName = daySettings?.guestName;
+      const isPending = daySettings?.isPending; // Use the flag for logic
       
       let bgClass = 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800';
-      if (status === 'blocked') bgClass = 'bg-gray-50 dark:bg-gray-800 pattern-diagonal-lines-sm text-gray-400 dark:text-gray-500';
-      if (status === 'booked') bgClass = 'bg-red-50/20 dark:bg-red-900/20';
+      
+      if (status === 'blocked') {
+          // GREY
+          bgClass = 'bg-gray-100 dark:bg-gray-800 pattern-diagonal-lines-sm text-gray-400 dark:text-gray-500';
+      }
+      if (status === 'booked') {
+          if (isPending) {
+              // YELLOW (Pending Approval)
+              bgClass = 'bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 border-l-4 border-amber-400';
+          } else {
+              // RED (Confirmed)
+              bgClass = 'bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30 border-l-4 border-rose-500';
+          }
+      }
+      
       if (isSelected) bgClass = 'bg-gray-900 dark:bg-white text-white dark:text-black ring-2 ring-inset ring-gray-900 dark:ring-white z-10';
 
       days.push(
@@ -189,23 +211,26 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
           className={`relative p-2 border-b border-r border-gray-200 dark:border-gray-800 cursor-pointer transition-all flex flex-col justify-between group select-none min-h-[100px] ${bgClass}`}
         >
           <div className="flex justify-between items-start">
-             <span className={`text-sm font-semibold ${isSelected ? 'text-white dark:text-black' : (status === 'booked' ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-200')} ${d === 1 ? 'underline decoration-brand-300' : ''}`}>
+             <span className={`text-sm font-semibold ${isSelected ? 'text-white dark:text-black' : (status === 'booked' ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-gray-200')} ${d === 1 ? 'underline decoration-brand-300' : ''}`}>
                  {d}
              </span>
           </div>
 
           <div className="flex flex-col items-center justify-center flex-1">
              {status === 'booked' ? (
-                 <div className="flex flex-col items-center animate-fadeIn">
-                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 border-2 border-white dark:border-gray-700 shadow-sm ${isSelected ? 'bg-white/20 text-white dark:text-black' : 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300'}`}>
+                 <div className="flex flex-col items-center animate-fadeIn w-full px-1">
+                     <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-1 border-2 border-white dark:border-gray-700 shadow-sm ${isSelected ? 'bg-white/20 text-white dark:text-black' : (isPending ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300')}`}>
                         <User className="w-4 h-4" />
                      </div>
-                     <span className={`text-[10px] font-bold truncate max-w-full px-1 ${isSelected ? 'text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-gray-300'}`}>{guestName || 'Reserved'}</span>
+                     <span className={`text-[10px] font-bold truncate max-w-full w-full text-center ${isSelected ? 'text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-gray-300'}`}>
+                        {guestName || 'Guest'}
+                     </span>
+                     {isPending && <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-tighter mt-0.5">Approval Req.</span>}
                  </div>
              ) : (
                 <div className="flex flex-col items-center">
                     {status === 'blocked' ? (
-                         <span className={`text-xs font-medium ${isSelected ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500'}`}>Blocked</span>
+                         <span className={`text-xs font-bold uppercase tracking-wider ${isSelected ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500'}`}>Blocked</span>
                     ) : (
                         <span className={`text-sm font-medium ${isSelected ? 'text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'}`}>₹{price?.toLocaleString()}</span>
                     )}
@@ -245,8 +270,9 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
                 {properties.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
             </select>
             <div className="hidden md:flex gap-4 text-xs font-medium text-gray-500 dark:text-gray-400">
-                <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-red-100 dark:bg-red-900 border border-red-200 dark:border-red-800"></div>Booked</div>
-                <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-gray-200 dark:bg-gray-700 pattern-diagonal-lines-sm"></div>Blocked</div>
+                <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div>Confirmed</div>
+                <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div>Pending</div>
+                <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600 pattern-diagonal-lines-sm"></div>Blocked</div>
             </div>
         </div>
       </div>
@@ -365,8 +391,8 @@ export const CalendarManager: React.FC<CalendarManagerProps> = ({ properties, on
                 onClose={() => setFetchedBooking(null)} 
                 userRole={UserRole.HOST}
                 onUpdate={() => {
-                    // Refresh parent if needed
-                    // In a real app we might trigger a re-fetch of property to update calendar
+                     // In a real app we would use the onRefresh callback, but reloading works for ensuring all states are fresh
+                     window.location.reload();
                 }}
             />
         )}

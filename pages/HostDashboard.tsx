@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Property, Booking } from '../types';
-import { BarChart, Activity, IndianRupee, Users, Calendar, ArrowUpRight, Sparkles, CheckCircle2, Star, Wrench, Clock, Check, X, Loader2 } from 'lucide-react';
+import { Property, Booking, UserRole } from '../types';
+import { BarChart, Activity, IndianRupee, Users, Calendar, ArrowUpRight, Sparkles, CheckCircle2, Star, Wrench, Clock, Check, X, Loader2, MessageSquare } from 'lucide-react';
 import {
   BarChart as RechartsBarChart,
   Bar,
@@ -13,10 +13,13 @@ import {
   CartesianGrid
 } from 'recharts';
 import { fetchPendingBookings, updateBookingStatus } from '../services/bookingService';
+import { startConversation } from '../services/chatService';
+import { BookingDetailsModal } from '../components/BookingDetailsModal';
 
 interface HostDashboardProps {
   properties: Property[];
   onNavigate: (page: string) => void;
+  onRefresh?: () => void; // Added for calendar sync
 }
 
 const RECENT_ACTIVITY = [
@@ -26,31 +29,63 @@ const RECENT_ACTIVITY = [
     { id: 4, type: 'maintenance', title: 'Maintenance', desc: 'Pool cleaning completed', time: '5h ago', icon: Wrench, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' },
 ];
 
-export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavigate }) => {
+export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavigate, onRefresh }) => {
   const totalRevenue = properties.reduce((sum, p) => sum + p.revenueLastMonth, 0);
   const avgOccupancy = Math.round(properties.reduce((sum, p) => sum + p.occupancyRate, 0) / (properties.length || 1));
   
   const [pendingBookings, setPendingBookings] = useState<Booking[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  
+  // State for Modal
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
-  useEffect(() => {
+  const loadPendingBookings = () => {
+      setLoadingRequests(true);
       fetchPendingBookings().then(bookings => {
-          // Filter to show only bookings for properties this host owns
           const myPropertyIds = properties.map(p => p.id);
           setPendingBookings(bookings.filter(b => myPropertyIds.includes(b.propertyId)));
       }).finally(() => setLoadingRequests(false));
+  };
+
+  useEffect(() => {
+      loadPendingBookings();
   }, [properties]);
 
-  const handleRequestAction = async (booking: Booking, status: 'confirmed' | 'cancelled') => {
+  const handleRequestAction = async (booking: Booking, status: 'confirmed' | 'cancelled', e: React.MouseEvent) => {
+      e.stopPropagation();
       setProcessingId(booking.id);
       try {
           await updateBookingStatus(booking.id, status, booking.propertyId, booking.startDate, booking.endDate);
+          // Refresh local list
           setPendingBookings(prev => prev.filter(b => b.id !== booking.id));
+          // Refresh global state (Properties/Calendar)
+          if (onRefresh) onRefresh(); 
+          // Close modal if open
+          setSelectedBooking(null);
       } catch (e) {
           alert("Failed to update status");
       } finally {
           setProcessingId(null);
+      }
+  };
+
+  const handleMessageGuest = async (booking: Booking, e: React.MouseEvent) => {
+      e.stopPropagation();
+      // Start conversation
+      try {
+           await startConversation(
+             'host1', // current host
+             booking.userId || 'guest_user_1', // guest id
+             booking.guestName || 'Guest',
+             booking.guestAvatar || '',
+             'Pine Stays',
+             'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&q=80&w=200',
+             booking.propertyName
+           );
+           onNavigate('messages');
+      } catch (e) {
+          console.error("Failed to start message", e);
       }
   };
   
@@ -95,47 +130,53 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
           ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {pendingBookings.map(booking => (
-                      <div key={booking.id} className="bg-white dark:bg-gray-800/80 backdrop-blur-sm p-5 rounded-2xl border border-brand-100 dark:border-brand-900/30 shadow-lg shadow-brand-100/20 dark:shadow-none transition-all hover:scale-[1.01]">
+                      <div 
+                        key={booking.id} 
+                        className="bg-white dark:bg-gray-800/80 backdrop-blur-sm p-5 rounded-2xl border border-brand-100 dark:border-brand-900/30 shadow-lg shadow-brand-100/20 dark:shadow-none transition-all hover:scale-[1.01] cursor-pointer group"
+                        onClick={() => setSelectedBooking(booking)}
+                      >
                           <div className="flex justify-between items-start mb-4">
                               <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-full bg-brand-100 dark:bg-brand-900/50 flex items-center justify-center text-brand-700 dark:text-brand-300 font-bold">
-                                      {booking.guestCount}
-                                  </div>
+                                  <img 
+                                    src={booking.guestAvatar || 'https://via.placeholder.com/100'} 
+                                    alt={booking.guestName} 
+                                    className="w-10 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-700 shadow-sm"
+                                  />
                                   <div>
-                                      <h3 className="font-bold text-gray-900 dark:text-white text-sm line-clamp-1">{booking.propertyName}</h3>
-                                      <p className="text-xs text-gray-500 dark:text-gray-400">Request ID: #{booking.id.slice(-4)}</p>
+                                      <h3 className="font-bold text-gray-900 dark:text-white text-sm line-clamp-1">{booking.guestName || 'Guest'}</h3>
+                                      <p className="text-xs text-gray-500 dark:text-gray-400">{booking.guestCount} Guests • {booking.propertyName}</p>
                                   </div>
                               </div>
-                              <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">
-                                  Pending
-                              </span>
+                              <button 
+                                onClick={(e) => handleMessageGuest(booking, e)}
+                                className="p-2 bg-gray-100 dark:bg-white/10 rounded-full text-gray-600 dark:text-gray-300 hover:bg-brand-100 dark:hover:bg-brand-900/50 hover:text-brand-600 transition-colors"
+                                title="Message Guest"
+                              >
+                                  <MessageSquare className="w-4 h-4" />
+                              </button>
                           </div>
                           
-                          <div className="bg-gray-50 dark:bg-black/20 rounded-xl p-3 mb-4 space-y-2">
+                          <div className="bg-gray-50 dark:bg-black/20 rounded-xl p-3 mb-4 space-y-2 border border-gray-100 dark:border-white/5">
                               <div className="flex justify-between text-sm">
                                   <span className="text-gray-500 dark:text-gray-400">Dates</span>
                                   <span className="font-semibold text-gray-900 dark:text-white">{booking.startDate} <span className="text-gray-400">→</span> {booking.endDate}</span>
                               </div>
-                              <div className="flex justify-between text-sm">
-                                  <span className="text-gray-500 dark:text-gray-400">Guests</span>
-                                  <span className="font-semibold text-gray-900 dark:text-white">{booking.guestCount} People</span>
-                              </div>
                               <div className="flex justify-between text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
-                                  <span className="font-bold text-gray-600 dark:text-gray-300">Total Payout</span>
+                                  <span className="font-bold text-gray-600 dark:text-gray-300">Payout</span>
                                   <span className="font-bold text-lg text-emerald-600 dark:text-emerald-400">₹{booking.totalPrice?.toLocaleString()}</span>
                               </div>
                           </div>
 
                           <div className="flex gap-3">
                               <button 
-                                onClick={() => handleRequestAction(booking, 'cancelled')}
+                                onClick={(e) => handleRequestAction(booking, 'cancelled', e)}
                                 disabled={processingId === booking.id}
                                 className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-50"
                               >
                                   <X className="w-4 h-4" /> Decline
                               </button>
                               <button 
-                                onClick={() => handleRequestAction(booking, 'confirmed')}
+                                onClick={(e) => handleRequestAction(booking, 'confirmed', e)}
                                 disabled={processingId === booking.id}
                                 className="flex-1 py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black font-semibold hover:bg-black dark:hover:bg-gray-200 transition-colors flex items-center justify-center gap-2 text-sm shadow-md disabled:opacity-50"
                               >
@@ -148,7 +189,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
           )}
       </div>
 
-      {/* Stats Grid */}
+      {/* Analytics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <StatCard 
           icon={<IndianRupee className="w-5 h-5 text-white" />} 
@@ -185,7 +226,6 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* Revenue Chart */}
         <div className="xl:col-span-2 glass-card rounded-3xl p-6 md:p-8 min-w-0 transition-colors duration-300">
           <div className="flex justify-between items-center mb-8">
             <div>
@@ -198,7 +238,6 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
                 <option>Year to Date</option>
             </select>
           </div>
-          {/* Explicit height container to fix Recharts warning */}
           <div className="h-[320px] w-full">
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -233,9 +272,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
           </div>
         </div>
 
-        {/* Right Column: AI Insights + Activity Feed */}
         <div className="space-y-6">
-            {/* AI Insight Card */}
             <div className="relative group overflow-hidden rounded-3xl min-h-[280px]">
               <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black dark:from-gray-800 dark:to-black opacity-100"></div>
               <div className="absolute top-0 right-0 p-32 bg-brand-600 rounded-full blur-[100px] opacity-20 -translate-y-1/2 translate-x-1/2 group-hover:opacity-30 transition-opacity duration-500"></div>
@@ -270,7 +307,6 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
               </div>
             </div>
 
-            {/* Recent Activity Feed */}
             <div className="glass-card rounded-3xl p-6">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -282,7 +318,6 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
                 <div className="space-y-6">
                     {RECENT_ACTIVITY.map((item, i) => (
                         <div key={item.id} className="flex gap-4 relative">
-                            {/* Connector Line */}
                             {i !== RECENT_ACTIVITY.length - 1 && (
                                 <div className="absolute left-[19px] top-10 bottom-[-24px] w-0.5 bg-gray-100 dark:bg-white/5"></div>
                             )}
@@ -302,6 +337,19 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
             </div>
         </div>
       </div>
+
+      {/* UNIVERSAL BOOKING DETAILS MODAL */}
+      {selectedBooking && (
+          <BookingDetailsModal 
+              booking={selectedBooking}
+              userRole={UserRole.HOST}
+              onClose={() => setSelectedBooking(null)}
+              onUpdate={() => {
+                  loadPendingBookings();
+                  if (onRefresh) onRefresh();
+              }}
+          />
+      )}
     </div>
   );
 };

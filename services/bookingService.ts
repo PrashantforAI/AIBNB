@@ -6,10 +6,8 @@ import { Booking, Property, DaySettings } from '../types';
 const BOOKING_COLLECTION = 'bookings';
 const PROPERTY_COLLECTION = 'properties';
 
-// Helper to get array of date strings between start and end
 export const getDatesInRange = (startDate: string, endDate: string) => {
     const dates = [];
-    // Normalize to midnight to avoid timezone offset issues
     const dt = new Date(startDate); 
     const end = new Date(endDate);
     
@@ -21,20 +19,14 @@ export const getDatesInRange = (startDate: string, endDate: string) => {
 };
 
 // --- CENTRALIZED AVAILABILITY LOGIC ---
-
-/**
- * Checks if a property is available for a given date range.
- * Returns true if ALL dates in the range are available (not booked/blocked).
- */
 export const isDateRangeAvailable = (property: Property, startDate: string, endDate: string): boolean => {
-    if (!startDate || !endDate) return true; // If no dates selected, it's "available" for browsing
-    
+    if (!startDate || !endDate) return true; 
     const requestedDates = getDatesInRange(startDate, endDate);
     const calendar = property.calendar || {};
 
     for (const dateStr of requestedDates) {
         const daySettings = calendar[dateStr];
-        // If a setting exists AND it's not available, return false
+        // If status is booked (Confirmed) OR blocked OR (booked + pending request), it's unavailable.
         if (daySettings && (daySettings.status === 'booked' || daySettings.status === 'blocked')) {
             return false;
         }
@@ -42,10 +34,6 @@ export const isDateRangeAvailable = (property: Property, startDate: string, endD
     return true;
 };
 
-/**
- * Returns a Set of all unavailable date strings for a property.
- * Used for UI Calendar disabling.
- */
 export const getUnavailableDates = (property: Property): Set<string> => {
     const unavailable = new Set<string>();
     const calendar = property.calendar || {};
@@ -63,10 +51,11 @@ export const getUnavailableDates = (property: Property): Set<string> => {
 
 export const getBookingById = async (bookingId: string): Promise<Booking | null> => {
     try {
+        if (!bookingId) return null;
         const docRef = doc(db, BOOKING_COLLECTION, bookingId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-            return { id: docSnap.id, ...docSnap.data() } as Booking;
+            return { ...docSnap.data(), id: docSnap.id } as Booking;
         }
         return null;
     } catch (error) {
@@ -80,7 +69,7 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status' |
         const datesToBlock = getDatesInRange(bookingData.startDate, bookingData.endDate);
         const propertyRef = doc(db, PROPERTY_COLLECTION, bookingData.propertyId);
 
-        // 1. Transactional-like Check: Fetch latest property data
+        // 1. Check Property Data & Availability
         const propertySnap = await getDoc(propertyRef);
         if (!propertySnap.exists()) {
             throw new Error("Property not found");
@@ -89,7 +78,6 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status' |
         const property = propertySnap.data() as Property;
         const currentCalendar = property.calendar || {};
 
-        // 2. Server-side Availability Validation
         for (const dateStr of datesToBlock) {
             const day = currentCalendar[dateStr];
             if (day && (day.status === 'booked' || day.status === 'blocked')) {
@@ -97,19 +85,29 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status' |
             }
         }
 
-        // 3. Add Booking Record
+        // 2. Prepare Booking Object
         const bookingCode = `#RES-${Math.floor(1000 + Math.random() * 9000)}`;
         const rawBooking = {
             ...bookingData,
-            thumbnail: bookingData.thumbnail || 'https://via.placeholder.com/300?text=No+Image',
-            id: '', // Will be set by firestore
-            status: 'pending', // Default to pending for approval workflow
+            guestName: bookingData.guestName || 'Guest',
+            guestAvatar: bookingData.guestAvatar || '',
+            
+            // Explicitly save host details for the receipt
+            hostId: bookingData.hostId || property.hostId || 'host1',
+            hostName: bookingData.hostName || 'Pine Stays',
+            hostAvatar: bookingData.hostAvatar || '',
+
+            propertyName: property.title, // Cache for receipts
+            propertyImage: property.images[0] || '', // Save main image for the receipt
+
+            thumbnail: bookingData.thumbnail || property.images[0] || 'https://via.placeholder.com/300',
+            id: '', 
+            status: 'pending', 
             bookingCode,
-            paymentStatus: 'pending',
+            paymentStatus: 'paid', // Simulating successful payment
             createdAt: new Date().toISOString(),
-            // Sanitize potential undefineds
             notes: bookingData.notes || '',
-            paymentMethod: bookingData.paymentMethod || 'pay_at_property'
+            paymentMethod: bookingData.paymentMethod || 'credit_card'
         };
 
         const safeBooking = JSON.parse(JSON.stringify(rawBooking));
@@ -117,24 +115,31 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status' |
         const docRef = await addDoc(collection(db, BOOKING_COLLECTION), safeBooking);
         const bookingId = docRef.id;
 
-        // 4. Update Property Calendar
-        // We block the dates as 'booked' but note it is Pending. We LINK the bookingId.
+        // 3. Update Property Calendar (Yellow/Pending state)
         const updatedCalendar: any = { ...currentCalendar };
         datesToBlock.forEach(dateStr => {
+            // Check for existing price, fallback to base price logic if missing (to prevent undefined error)
+            const dateObj = new Date(dateStr);
+            const dayOfWeek = dateObj.getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
+            const fallbackPrice = isWeekend ? (property.baseWeekendPrice || 0) : (property.baseWeekdayPrice || 0);
+            
+            const existingPrice = currentCalendar[dateStr]?.price;
+            const priceToSet = existingPrice !== undefined ? existingPrice : fallbackPrice;
+
             updatedCalendar[dateStr] = {
                 date: dateStr,
                 status: 'booked',
-                price: currentCalendar[dateStr]?.price, // Keep existing price if set
-                guestName: 'Pending Request', 
-                note: `Pending Booking ${bookingCode}`,
-                bookingId: bookingId // LINKING HERE
+                price: priceToSet,
+                guestName: bookingData.guestName || 'Guest',
+                isPending: true, // FLAG: Yellow in Calendar
+                note: `Pending: ${bookingCode}`,
+                bookingId: bookingId
             };
         });
 
-        const safeCalendar = JSON.parse(JSON.stringify(updatedCalendar));
-
         await updateDoc(propertyRef, {
-            calendar: safeCalendar
+            calendar: updatedCalendar
         });
 
         return bookingId;
@@ -146,9 +151,13 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status' |
 
 export const updateBookingStatus = async (bookingId: string, status: 'confirmed' | 'cancelled', propertyId: string, startDate: string, endDate: string) => {
     try {
+        if (!bookingId) throw new Error("Invalid booking ID");
+
+        // 1. Update Booking Document
         const bookingRef = doc(db, BOOKING_COLLECTION, bookingId);
         await updateDoc(bookingRef, { status });
 
+        // 2. Update Property Calendar
         const propertyRef = doc(db, PROPERTY_COLLECTION, propertyId);
         const propertySnap = await getDoc(propertyRef);
         
@@ -156,33 +165,55 @@ export const updateBookingStatus = async (bookingId: string, status: 'confirmed'
              const property = propertySnap.data() as Property;
              const calendar = { ...property.calendar };
              const dates = getDatesInRange(startDate, endDate);
+             
+             // Fetch booking to get codes/names if confirming
+             let bookingDetails: Booking | null = null;
+             if (status === 'confirmed') {
+                 bookingDetails = await getBookingById(bookingId);
+             }
 
-             if (status === 'cancelled') {
-                 // Free up dates
-                 dates.forEach(dateStr => {
-                     // Check if this date is indeed held by this booking
-                     const day = calendar[dateStr];
-                     if (day && (day.bookingId === bookingId || day.note?.includes(bookingId))) {
+             dates.forEach(dateStr => {
+                 const currentDay = calendar[dateStr];
+                 
+                 // Fallback price logic for safety
+                 const dateObj = new Date(dateStr);
+                 const dayOfWeek = dateObj.getDay();
+                 const isWeekend = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
+                 const fallbackPrice = isWeekend ? (property.baseWeekendPrice || 0) : (property.baseWeekdayPrice || 0);
+
+                 if (status === 'cancelled') {
+                     // Only clear if it belongs to THIS booking
+                     if (currentDay && (currentDay.bookingId === bookingId || currentDay.note?.includes(bookingId))) {
                         calendar[dateStr] = {
                             date: dateStr,
                             status: 'available',
-                            price: day.price // Preserve price
-                            // Remove guestName, note, bookingId
+                            price: currentDay.price !== undefined ? currentDay.price : fallbackPrice
                         };
                      }
-                 });
-             } else if (status === 'confirmed') {
-                 // Update note to remove "Pending"
-                 const booking = await getBookingById(bookingId);
-                 dates.forEach(dateStr => {
-                     if (calendar[dateStr]) {
-                         calendar[dateStr].note = `Booking ${booking?.bookingCode}`;
-                         calendar[dateStr].guestName = 'Confirmed Guest';
-                         calendar[dateStr].status = 'booked';
-                         calendar[dateStr].bookingId = bookingId;
+                 } else if (status === 'confirmed') {
+                     // Confirm: Turn Yellow -> Red
+                     if (currentDay && currentDay.bookingId === bookingId) {
+                         calendar[dateStr] = {
+                             ...currentDay,
+                             status: 'booked',
+                             isPending: false, // FLAG: Red in Calendar
+                             guestName: bookingDetails?.guestName || currentDay.guestName,
+                             note: `Confirmed: ${bookingDetails?.bookingCode}`
+                         };
+                     } else if (!currentDay) {
+                         // Fallback creation (should rarely happen if flow is correct)
+                         calendar[dateStr] = {
+                             date: dateStr,
+                             status: 'booked',
+                             isPending: false,
+                             bookingId: bookingId,
+                             price: fallbackPrice,
+                             guestName: bookingDetails?.guestName || 'Guest',
+                             note: `Confirmed: ${bookingDetails?.bookingCode}`
+                         };
                      }
-                 });
-             }
+                 }
+             });
              
              await updateDoc(propertyRef, { calendar });
         }
@@ -198,7 +229,7 @@ export const fetchGuestBookings = async (): Promise<Booking[]> => {
         const querySnapshot = await getDocs(q);
         const bookings: Booking[] = [];
         querySnapshot.forEach((doc) => {
-            bookings.push({ id: doc.id, ...doc.data() } as Booking);
+            bookings.push({ ...doc.data(), id: doc.id } as Booking);
         });
         return bookings;
     } catch (error) {
@@ -213,7 +244,7 @@ export const fetchPendingBookings = async (): Promise<Booking[]> => {
         const querySnapshot = await getDocs(q);
         const bookings: Booking[] = [];
         querySnapshot.forEach((doc) => {
-            bookings.push({ id: doc.id, ...doc.data() } as Booking);
+            bookings.push({ ...doc.data(), id: doc.id } as Booking);
         });
         return bookings;
     } catch (error) {

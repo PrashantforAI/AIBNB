@@ -23,7 +23,8 @@ export const fetchProperties = async (): Promise<Property[]> => {
           }
       }
 
-      properties.push({ id: doc.id, ...data });
+      // Ensure doc.id takes precedence
+      properties.push({ ...data, id: doc.id });
     });
     return properties;
   } catch (error) {

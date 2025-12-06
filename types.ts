@@ -50,8 +50,11 @@ export interface DaySettings {
   status: 'available' | 'booked' | 'blocked';
   minStay?: number;
   note?: string; // e.g., "Blocked for painting"
-  guestName?: string; // For booked dates
-  bookingId?: string; // Link to the actual booking document
+  
+  // Linked Booking Data (Cache for Calendar UI)
+  bookingId?: string; 
+  guestName?: string; 
+  isPending?: boolean; // true = Request (Yellow), false = Confirmed (Red)
 }
 
 export interface Review {
@@ -67,10 +70,19 @@ export interface Booking {
     bookingCode: string; // e.g., #RES-8832
     propertyId: string;
     propertyName: string;
+    propertyImage?: string; // Cache for UI
     location: string;
     startDate: string; // YYYY-MM-DD
     endDate: string; // YYYY-MM-DD
     guestCount: number;
+    
+    guestName?: string; 
+    guestAvatar?: string; 
+    
+    hostId?: string;
+    hostName?: string;
+    hostAvatar?: string;
+
     totalPrice: number;
     status: 'confirmed' | 'pending' | 'cancelled';
     paymentStatus: 'paid' | 'pending' | 'refunded' | 'failed';
@@ -78,7 +90,7 @@ export interface Booking {
     createdAt: string; // ISO String
     thumbnail: string;
     userId?: string; 
-    hostId?: string;
+    
     checkInTime?: string;
     checkOutTime?: string;
     notes?: string;

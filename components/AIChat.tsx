@@ -1,7 +1,10 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { sendMessageToAI, initializeChat, parseAIResponse } from '../services/aiService';
 import { ChatMessage, Property, AIAction, UserRole } from '../types';
-import { MessageSquare, X, Send, Sparkles, Loader2, Bot, ArrowRight, Star, CheckCircle, Calendar, MapPin, LayoutDashboard, Zap, AlertTriangle } from 'lucide-react';
+import { MessageSquare, X, Send, Sparkles, Loader2, Bot, ArrowRight, Star, CheckCircle, Calendar, MapPin, LayoutDashboard, Zap, AlertTriangle, Minus, Plus } from 'lucide-react';
+import { CalendarPopup } from './CalendarPopup';
+import { getUnavailableDates } from '../services/bookingService';
 
 interface AIChatProps {
   context?: string;
@@ -60,14 +63,74 @@ const ChatPropertyCard: React.FC<{ property: Property; onPreview: (p: Property) 
 };
 
 // --- Booking Proposal Card ---
-const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promise<void> }> = ({ proposal, onBook }) => {
+const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promise<void>; properties?: Property[] }> = ({ proposal, onBook, properties }) => {
     const [status, setStatus] = useState<'idle' | 'loading' | 'confirmed'>('idle');
+    
+    // Hydrate details
+    const propertyDetails = properties?.find(p => p.id === proposal.propertyId);
+    
+    // Editable State
+    const [checkIn, setCheckIn] = useState(proposal.startDate);
+    const [checkOut, setCheckOut] = useState(proposal.endDate);
+    const [guests, setGuests] = useState<number>(proposal.guests || 2);
+    const [currentPrice, setCurrentPrice] = useState<number>(proposal.totalPrice || 0);
+    
+    const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | null>(null);
+
+    const displayTitle = propertyDetails?.title || proposal.propertyName || 'Unknown Property';
+    const displayImage = propertyDetails?.images[0];
+    const maxGuests = propertyDetails?.maxGuests || 10;
+    const unavailableDates = propertyDetails ? getUnavailableDates(propertyDetails) : new Set<string>();
+
+    // Price Calculation Logic (Replicated from GuestDetails for interactivity)
+    useEffect(() => {
+        if (!propertyDetails || !checkIn || !checkOut) return;
+        
+        const start = new Date(checkIn);
+        const end = new Date(checkOut);
+        
+        if (start >= end) {
+            setCurrentPrice(0);
+            return;
+        }
+
+        const days = [];
+        let dt = new Date(start);
+        while (dt < end) {
+            days.push(new Date(dt));
+            dt.setDate(dt.getDate() + 1);
+        }
+        
+        let baseTotal = 0;
+        days.forEach(d => {
+            const isWeekend = d.getDay() === 0 || d.getDay() === 5 || d.getDay() === 6;
+            baseTotal += isWeekend ? propertyDetails.baseWeekendPrice : propertyDetails.baseWeekdayPrice;
+        });
+        
+        const nights = days.length;
+        const extraGuests = Math.max(0, guests - propertyDetails.baseGuests);
+        const extraFee = extraGuests * (propertyDetails.extraGuestPrice || 0) * nights;
+        
+        const serviceFee = Math.round((baseTotal + extraFee) * 0.08);
+        const taxes = Math.round((baseTotal + extraFee + serviceFee) * 0.18);
+        
+        setCurrentPrice(baseTotal + extraFee + serviceFee + taxes);
+
+    }, [checkIn, checkOut, guests, propertyDetails]);
 
     const handleConfirm = async () => {
-        if (!onBook) return;
+        if (!onBook || !checkIn || !checkOut) return;
         setStatus('loading');
         try {
-            await onBook({ ...proposal, thumbnail: 'https://via.placeholder.com/150' });
+            await onBook({ 
+                propertyId: proposal.propertyId,
+                propertyName: displayTitle,
+                startDate: checkIn,
+                endDate: checkOut,
+                guests: guests,
+                totalPrice: currentPrice,
+                thumbnail: displayImage || 'https://via.placeholder.com/150' 
+            });
             setStatus('confirmed');
         } catch (e) {
             setStatus('idle');
@@ -82,39 +145,111 @@ const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promis
                     <CheckCircle className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <h4 className="font-bold text-emerald-900 dark:text-emerald-300 text-lg">Trip Confirmed!</h4>
-                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">Pack your bags for {proposal.propertyName}.</p>
+                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">Pack your bags for {displayTitle}.</p>
             </div>
         );
     }
 
+    const today = new Date().toISOString().split('T')[0];
+
     return (
-        <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-white/10 shadow-xl mt-4 mb-4 max-w-sm overflow-hidden mx-auto md:mx-0">
-            <div className="bg-gradient-to-r from-brand-50 to-white dark:from-brand-900/20 dark:to-gray-900 p-4 border-b border-gray-100 dark:border-white/5 flex items-center gap-3">
+        <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-white/10 shadow-xl mt-4 mb-4 max-w-sm overflow-visible mx-auto md:mx-0 relative z-10">
+            <div className="bg-gradient-to-r from-brand-50 to-white dark:from-brand-900/20 dark:to-gray-900 p-4 border-b border-gray-100 dark:border-white/5 flex items-center gap-3 rounded-t-3xl">
                 <div className="p-2 bg-brand-100 dark:bg-brand-900/40 rounded-xl text-brand-600 dark:text-brand-300"><Calendar className="w-5 h-5" /></div>
                 <h4 className="font-bold text-gray-900 dark:text-white">Ready to book?</h4>
             </div>
+            
+            {displayImage && (
+                <div className="h-32 w-full overflow-hidden relative">
+                    <img src={displayImage} alt={displayTitle} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-4">
+                        <span className="text-white font-bold text-sm shadow-sm">{displayTitle}</span>
+                    </div>
+                </div>
+            )}
+
             <div className="p-5 space-y-4">
-                <div className="text-lg font-bold text-gray-900 dark:text-white">{proposal.propertyName || 'Property'}</div>
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl">
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">Check-in</span>
-                        <div className="font-semibold text-gray-900 dark:text-white text-sm">{proposal.startDate}</div>
+                {!displayImage && <div className="text-lg font-bold text-gray-900 dark:text-white">{displayTitle}</div>}
+                
+                <div className="grid grid-cols-2 gap-3 relative">
+                    {/* Check In */}
+                    <div 
+                        className={`bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border transition-all cursor-pointer ${activePicker === 'checkIn' ? 'border-brand-500 ring-1 ring-brand-500' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300'}`}
+                        onClick={() => setActivePicker('checkIn')}
+                    >
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider block mb-1">Check-in</span>
+                        <div className={`font-semibold text-sm truncate ${checkIn ? 'text-gray-900 dark:text-white' : 'text-gray-400 italic'}`}>
+                            {checkIn || 'Select Date'}
+                        </div>
                     </div>
-                    <div className="bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl">
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">Check-out</span>
-                        <div className="font-semibold text-gray-900 dark:text-white text-sm">{proposal.endDate}</div>
+
+                    {/* Check Out */}
+                    <div 
+                        className={`bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border transition-all cursor-pointer ${activePicker === 'checkOut' ? 'border-brand-500 ring-1 ring-brand-500' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300'}`}
+                        onClick={() => setActivePicker('checkOut')}
+                    >
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider block mb-1">Check-out</span>
+                        <div className={`font-semibold text-sm truncate ${checkOut ? 'text-gray-900 dark:text-white' : 'text-gray-400 italic'}`}>
+                            {checkOut || 'Select Date'}
+                        </div>
                     </div>
+
+                    {/* Popup Calendar */}
+                    {activePicker && (
+                        <div className="absolute top-[110%] left-0 right-0 z-50">
+                            <CalendarPopup 
+                                selectedDate={activePicker === 'checkIn' ? checkIn : checkOut}
+                                startDate={checkIn}
+                                endDate={checkOut}
+                                minDate={activePicker === 'checkOut' ? (checkIn || today) : today}
+                                unavailableDates={unavailableDates}
+                                onSelect={(d) => {
+                                    if (activePicker === 'checkIn') {
+                                        setCheckIn(d);
+                                        setActivePicker('checkOut');
+                                    } else {
+                                        setCheckOut(d);
+                                        setActivePicker(null);
+                                    }
+                                }}
+                                onClose={() => setActivePicker(null)}
+                                className="shadow-2xl ring-2 ring-black/5"
+                            />
+                        </div>
+                    )}
                 </div>
-                <div className="flex justify-between items-center px-1">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">{proposal.guests} Guests</span>
-                    <span className="text-xl font-bold text-brand-600 dark:text-brand-400">₹{proposal.totalPrice?.toLocaleString() || '0'}</span>
+
+                {/* Guest Count Edit */}
+                <div className="flex justify-between items-center px-1 pt-2 border-t border-gray-100 dark:border-white/5">
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">Guests</span>
+                        <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
+                            <button 
+                                onClick={() => setGuests(Math.max(1, guests - 1))}
+                                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white dark:hover:bg-gray-700 shadow-sm transition-all"
+                                disabled={guests <= 1}
+                            >
+                                <Minus className="w-3 h-3 text-gray-600 dark:text-gray-300" />
+                            </button>
+                            <span className="text-xs font-bold w-4 text-center text-gray-900 dark:text-white">{guests}</span>
+                            <button 
+                                onClick={() => setGuests(Math.min(maxGuests, guests + 1))}
+                                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white dark:hover:bg-gray-700 shadow-sm transition-all"
+                                disabled={guests >= maxGuests}
+                            >
+                                <Plus className="w-3 h-3 text-gray-600 dark:text-gray-300" />
+                            </button>
+                        </div>
+                    </div>
+                    <span className="text-xl font-bold text-brand-600 dark:text-brand-400">₹{currentPrice?.toLocaleString() || '0'}</span>
                 </div>
+
                 <button 
                     onClick={handleConfirm}
-                    disabled={status === 'loading'}
-                    className="w-full mt-2 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-black py-3 rounded-xl font-bold transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 text-sm"
+                    disabled={status === 'loading' || !checkIn || !checkOut}
+                    className="w-full mt-2 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-black py-3.5 rounded-xl font-bold transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm Reservation'}
+                    {status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : (!checkIn || !checkOut ? 'Select Dates' : 'Confirm Reservation')}
                 </button>
             </div>
         </div>
@@ -145,7 +280,7 @@ const FormattedMessage = ({ text, properties, onPreview, onBook }: { text: strin
         const bookingMatch = part.match(/^\[BOOKING_INTENT: (.+?)\]$/);
         if (bookingMatch) {
             try {
-                return <BookingProposalCard key={index} proposal={JSON.parse(bookingMatch[1])} onBook={onBook} />;
+                return <BookingProposalCard key={index} proposal={JSON.parse(bookingMatch[1])} onBook={onBook} properties={properties} />;
             } catch (e) { return null; }
         }
         
@@ -338,9 +473,7 @@ export const AIChat: React.FC<AIChatProps> = ({
               </div>
 
               {/* Minimal Floating Input */}
-              {/* pointer-events-none ensures clicking outside input falls through to list below */}
               <div className="absolute bottom-8 left-0 right-0 px-4 flex justify-center z-50 pointer-events-none">
-                  {/* pointer-events-auto ensures the input itself works */}
                   <div className="w-full max-w-2xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-[2rem] shadow-2xl p-2 flex items-center gap-2 transition-all focus-within:ring-2 focus-within:ring-brand-500/30 focus-within:border-brand-500/50 hover:border-gray-300 dark:hover:border-white/20 pointer-events-auto">
                       <div className="pl-4 pr-2">
                           <Zap className="w-5 h-5 text-brand-500" />

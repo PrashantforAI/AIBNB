@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Booking, UserRole } from '../types';
-import { X, Calendar, MapPin, User, CreditCard, Clock, ShieldCheck, AlertCircle, FileText, CheckCircle2 } from 'lucide-react';
+import { X, Calendar, MapPin, User, CreditCard, Clock, ShieldCheck, AlertCircle, CheckCircle2, Copy, Star, MessageSquare } from 'lucide-react';
 import { updateBookingStatus } from '../services/bookingService';
 
 interface BookingDetailsModalProps {
@@ -35,143 +35,167 @@ export const BookingDetailsModal: React.FC<BookingDetailsModalProps> = ({ bookin
         }
     };
 
-    const getStatusColor = (status: string) => {
-        switch(status) {
-            case 'confirmed': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800';
-            case 'pending': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800';
-            case 'cancelled': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800';
-            default: return 'bg-gray-100 text-gray-700';
-        }
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
+        alert('Copied to clipboard');
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800 flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+            <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800 flex flex-col max-h-[95vh] relative">
                 
-                {/* Header with Image */}
-                <div className="relative h-40 shrink-0">
-                    <img src={booking.thumbnail} className="w-full h-full object-cover opacity-90" alt={booking.propertyName} />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
-                    <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full text-white transition-colors">
-                        <X className="w-5 h-5" />
-                    </button>
-                    <div className="absolute bottom-4 left-6 right-6">
-                        <div className="flex justify-between items-end">
-                            <div>
-                                <h2 className="text-2xl font-bold text-white shadow-sm leading-tight">{booking.propertyName}</h2>
-                                <p className="text-gray-200 text-sm flex items-center gap-1 mt-1"><MapPin className="w-3.5 h-3.5" /> {booking.location}</p>
-                            </div>
-                            <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border backdrop-blur-md ${getStatusColor(booking.status)}`}>
-                                {booking.status}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                {/* Modal Close Button */}
+                <button 
+                    onClick={onClose} 
+                    className="absolute top-4 right-4 z-20 p-2 bg-white/50 dark:bg-black/50 hover:bg-white dark:hover:bg-black backdrop-blur-md rounded-full text-gray-900 dark:text-white transition-colors"
+                >
+                    <X className="w-5 h-5" />
+                </button>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* Booking Reference */}
-                    <div className="flex justify-between items-center bg-gray-50 dark:bg-white/5 p-4 rounded-xl border border-gray-100 dark:border-white/5">
-                        <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider">Booking Reference</p>
-                            <p className="text-lg font-mono font-bold text-gray-900 dark:text-white">{booking.bookingCode || `#${booking.id.slice(-6).toUpperCase()}`}</p>
-                        </div>
-                        {booking.status === 'confirmed' && (
-                            <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                                <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Dates & Guests */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                            <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase">Check-in</p>
-                            <p className="font-semibold text-gray-900 dark:text-white text-lg">{booking.startDate}</p>
-                            <p className="text-xs text-gray-400">{booking.checkInTime || '14:00 PM'}</p>
-                        </div>
-                        <div className="space-y-1 text-right">
-                            <p className="text-xs text-gray-500 dark:text-gray-400 font-bold uppercase">Check-out</p>
-                            <p className="font-semibold text-gray-900 dark:text-white text-lg">{booking.endDate}</p>
-                            <p className="text-xs text-gray-400">{booking.checkOutTime || '11:00 AM'}</p>
-                        </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 py-3 border-y border-gray-100 dark:border-gray-800">
-                        <User className="w-5 h-5 text-gray-400" />
-                        <span className="text-gray-700 dark:text-gray-300 font-medium">{booking.guestCount} Guests</span>
-                    </div>
-
-                    {/* Payment Info */}
-                    <div className="space-y-3">
-                        <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <CreditCard className="w-4 h-4" /> Payment Details
-                        </h3>
-                        <div className="bg-gray-50 dark:bg-white/5 rounded-xl p-4 space-y-2 text-sm">
-                            <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Total Amount</span>
-                                <span className="font-bold text-gray-900 dark:text-white">₹{booking.totalPrice?.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Status</span>
-                                <span className={`font-bold capitalize ${booking.paymentStatus === 'paid' ? 'text-emerald-600 dark:text-emerald-400' : 'text-yellow-600'}`}>
-                                    {booking.paymentStatus || 'Pending'}
+                {/* Hero Section */}
+                <div className="h-48 md:h-60 relative shrink-0">
+                    <img 
+                        src={booking.propertyImage || booking.thumbnail} 
+                        className="w-full h-full object-cover" 
+                        alt={booking.propertyName} 
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+                    <div className="absolute bottom-6 left-6 right-6 text-white">
+                        <div className="flex items-center gap-2 mb-2">
+                             {booking.status === 'confirmed' && (
+                                <span className="bg-emerald-500 text-white text-xs font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3" /> Confirmed
                                 </span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Method</span>
-                                <span className="font-medium text-gray-900 dark:text-white capitalize">{booking.paymentMethod?.replace('_', ' ') || 'Pay at property'}</span>
-                            </div>
+                             )}
+                             {booking.status === 'pending' && (
+                                <span className="bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-md flex items-center gap-1 animate-pulse">
+                                    <Clock className="w-3 h-3" /> Awaiting Approval
+                                </span>
+                             )}
+                             {booking.status === 'cancelled' && (
+                                <span className="bg-gray-500 text-white text-xs font-bold px-2.5 py-1 rounded-md flex items-center gap-1">
+                                    <X className="w-3 h-3" /> Cancelled
+                                </span>
+                             )}
                         </div>
-                    </div>
-
-                    {/* Notes */}
-                    {booking.notes && (
-                        <div className="space-y-2">
-                            <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                                <FileText className="w-4 h-4" /> Special Requests
-                            </h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 italic bg-gray-50 dark:bg-white/5 p-3 rounded-xl">
-                                "{booking.notes}"
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Policies */}
-                    <div className="flex gap-3 text-xs text-gray-500 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/10 p-3 rounded-xl border border-blue-100 dark:border-blue-900/30">
-                        <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                        <p>Cancellation is subject to property rules. Contact support for disputes.</p>
+                        <h1 className="text-3xl font-extrabold shadow-sm">{booking.propertyName}</h1>
+                        <p className="flex items-center gap-1.5 opacity-90 text-sm mt-1">
+                            <MapPin className="w-3.5 h-3.5" /> {booking.location}
+                        </p>
                     </div>
                 </div>
 
-                {/* Actions Footer */}
+                {/* Body Content */}
+                <div className="flex-1 overflow-y-auto">
+                    <div className="p-6 md:p-8 space-y-8">
+                        
+                        {/* 1. Reservation Details Row */}
+                        <div className="flex flex-col md:flex-row justify-between gap-6 border-b border-gray-100 dark:border-gray-800 pb-8">
+                             <div className="space-y-1">
+                                 <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Check-in</p>
+                                 <p className="text-xl font-bold text-gray-900 dark:text-white">{booking.startDate}</p>
+                                 <p className="text-sm text-gray-500 dark:text-gray-400">{booking.checkInTime || '14:00 PM'}</p>
+                             </div>
+                             <div className="hidden md:block w-px bg-gray-200 dark:bg-gray-800 h-12 self-center"></div>
+                             <div className="space-y-1">
+                                 <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Check-out</p>
+                                 <p className="text-xl font-bold text-gray-900 dark:text-white">{booking.endDate}</p>
+                                 <p className="text-sm text-gray-500 dark:text-gray-400">{booking.checkOutTime || '11:00 AM'}</p>
+                             </div>
+                             <div className="hidden md:block w-px bg-gray-200 dark:bg-gray-800 h-12 self-center"></div>
+                             <div className="space-y-1">
+                                 <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Confirmation Code</p>
+                                 <div 
+                                    onClick={() => copyToClipboard(booking.bookingCode)}
+                                    className="flex items-center gap-2 cursor-pointer group"
+                                 >
+                                     <p className="text-xl font-mono font-bold text-gray-900 dark:text-white">{booking.bookingCode}</p>
+                                     <Copy className="w-4 h-4 text-gray-400 group-hover:text-brand-500 transition-colors" />
+                                 </div>
+                             </div>
+                        </div>
+
+                        {/* 2. Host / Guest Info */}
+                        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-8">
+                            <div className="flex items-center gap-4">
+                                <img 
+                                    src={userRole === UserRole.GUEST ? (booking.hostAvatar || 'https://via.placeholder.com/100') : (booking.guestAvatar || 'https://via.placeholder.com/100')} 
+                                    alt="Profile" 
+                                    className="w-14 h-14 rounded-full object-cover border-2 border-white dark:border-gray-800 shadow-sm"
+                                />
+                                <div>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                        {userRole === UserRole.GUEST ? 'Hosted by' : 'Booked by'}
+                                    </p>
+                                    <h3 className="font-bold text-lg text-gray-900 dark:text-white">
+                                        {userRole === UserRole.GUEST ? (booking.hostName || 'Pine Stays') : (booking.guestName || 'Guest')}
+                                    </h3>
+                                    {userRole === UserRole.HOST && (
+                                        <p className="text-sm text-gray-500">{booking.guestCount} guests</p>
+                                    )}
+                                </div>
+                            </div>
+                            <button className="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 p-3 rounded-full transition-colors text-gray-900 dark:text-white">
+                                <MessageSquare className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* 3. Payment Breakdown */}
+                        <div className="space-y-4">
+                            <h3 className="font-bold text-gray-900 dark:text-white text-lg">Payment Info</h3>
+                            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-5 space-y-3">
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-600 dark:text-gray-400">Total</span>
+                                    <span className="font-bold text-gray-900 dark:text-white">₹{booking.totalPrice?.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-600 dark:text-gray-400">Payment Status</span>
+                                    <span className={`font-bold capitalize flex items-center gap-1.5 ${booking.paymentStatus === 'paid' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600'}`}>
+                                        {booking.paymentStatus === 'paid' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4"/>}
+                                        {booking.paymentStatus}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm border-t border-gray-200 dark:border-gray-700 pt-3 mt-3">
+                                    <span className="text-gray-600 dark:text-gray-400">Paid via</span>
+                                    <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                                        <CreditCard className="w-4 h-4" /> 
+                                        {booking.paymentMethod?.replace('_', ' ').toUpperCase() || 'CREDIT CARD'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                {/* Footer Actions */}
                 {booking.status !== 'cancelled' && (
-                    <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex gap-3">
+                    <div className="p-4 md:p-6 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col sm:flex-row gap-3">
                         {userRole === UserRole.HOST && booking.status === 'pending' ? (
                             <>
                                 <button 
                                     onClick={handleCancel}
-                                    className="flex-1 py-3 rounded-xl border border-gray-300 dark:border-gray-700 font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                    className="flex-1 py-3.5 rounded-xl border-2 border-gray-200 dark:border-gray-700 font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                                 >
-                                    Decline
+                                    Decline Request
                                 </button>
                                 <button 
                                     onClick={handleConfirm}
-                                    className="flex-1 py-3 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-black font-bold hover:opacity-90 transition-opacity shadow-lg"
+                                    className="flex-1 py-3.5 rounded-xl bg-black dark:bg-white text-white dark:text-black font-bold hover:opacity-90 transition-opacity shadow-lg"
                                 >
                                     Approve Booking
                                 </button>
                             </>
                         ) : (
                             <>
-                                <button className="flex-1 py-3 rounded-xl border border-gray-300 dark:border-gray-700 font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                                    Reschedule
+                                <button className="flex-1 py-3.5 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                    Support
                                 </button>
                                 <button 
                                     onClick={handleCancel}
-                                    className="flex-1 py-3 rounded-xl bg-white dark:bg-gray-800 text-red-600 border border-red-200 dark:border-red-900 font-bold hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                    className="flex-1 py-3.5 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/10 font-bold transition-colors"
                                 >
-                                    Cancel Booking
+                                    Cancel Reservation
                                 </button>
                             </>
                         )}

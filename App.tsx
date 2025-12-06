@@ -40,6 +40,13 @@ function App() {
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
 
   const currentUserId = userRole === UserRole.HOST ? 'host1' : userRole === UserRole.GUEST ? 'guest_user_1' : 'sp1';
+  // Hardcoded for demo identity consistency
+  const currentUserName = userRole === UserRole.HOST ? 'Pine Stays' : userRole === UserRole.GUEST ? 'Rahul Sharma' : 'Service Provider';
+  const currentUserAvatar = userRole === UserRole.HOST 
+      ? MOCK_HOST_PROFILE.avatar 
+      : userRole === UserRole.GUEST 
+          ? 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=100'
+          : 'https://via.placeholder.com/100';
 
   const [searchCriteria, setSearchCriteria] = useState<SearchCriteria>({
       location: '', checkIn: '', checkOut: '', adults: 2, children: 0
@@ -149,7 +156,14 @@ function App() {
 
   const handleAiBooking = async (proposal: any) => {
       const prop = properties.find(p => p.id === proposal.propertyId);
-      await createBooking({ ...proposal, location: prop?.city || '', thumbnail: prop?.images[0] || '', status: 'confirmed' });
+      await createBooking({ 
+          ...proposal, 
+          location: prop?.city || '', 
+          thumbnail: prop?.images[0] || '', 
+          status: 'confirmed', 
+          guestName: currentUserName,
+          guestAvatar: currentUserAvatar
+      });
       await refreshProperties(); 
   };
 
@@ -263,12 +277,12 @@ function App() {
                     <Layout activePage={activePage} onNavigate={handleNavigate}>
                         {isEditorOpen ? <PropertyEditor initialData={editingProperty} onSave={handleSaveProperty} onCancel={() => setIsEditorOpen(false)} /> : (
                         <>
-                            {activePage === 'dashboard' && <HostDashboard properties={properties} onNavigate={handleNavigate} />}
+                            {activePage === 'dashboard' && <HostDashboard properties={properties} onNavigate={handleNavigate} onRefresh={refreshProperties} />}
                             {activePage === 'listings' && <PropertyList properties={properties} onEdit={handleEditProperty} onAddNew={handleAddNew} onPreview={handlePreviewProperty} />}
                             {activePage === 'calendar' && <CalendarManager properties={properties} onUpdateProperty={handleUpdateProperty} />}
                             {activePage === 'messages' && <Messages currentUserId={currentUserId} userRole={userRole} />} 
                             {activePage === 'profile' && <HostProfilePage profile={hostProfile} isEditable={true} onSave={handleSaveProfile} currentUserId={currentUserId} />}
-                            {activePage === 'guest-view' && previewProperty && <GuestPropertyDetails property={previewProperty} onBack={() => handleNavigate('listings')} onViewHost={handleViewHost} hostName={hostProfile.name} hostAvatar={hostProfile.avatar} onBookingSuccess={refreshProperties} />}
+                            {activePage === 'guest-view' && previewProperty && <GuestPropertyDetails property={previewProperty} onBack={() => handleNavigate('listings')} onViewHost={handleViewHost} hostName={hostProfile.name} hostAvatar={hostProfile.avatar} onBookingSuccess={refreshProperties} guestName="Host View" />}
                         </>
                         )}
                     </Layout>
@@ -288,7 +302,7 @@ function App() {
                             />
                         )}
 
-                        {activePage === 'guest-view' && previewProperty && <GuestPropertyDetails property={previewProperty} onBack={() => setActivePage('guest-dashboard')} onViewHost={handleViewHost} hostName={hostProfile.name} hostAvatar={hostProfile.avatar} onBookingSuccess={refreshProperties} />}
+                        {activePage === 'guest-view' && previewProperty && <GuestPropertyDetails property={previewProperty} onBack={() => setActivePage('guest-dashboard')} onViewHost={handleViewHost} hostName={hostProfile.name} hostAvatar={hostProfile.avatar} onBookingSuccess={refreshProperties} guestName={currentUserName} guestAvatar={currentUserAvatar} />}
                         
                         {activePage === 'host-profile' && (
                             <HostProfilePage profile={hostProfile} isEditable={false} onBack={() => previewProperty ? setActivePage('guest-view') : setActivePage('guest-dashboard')} currentUserId={currentUserId} />
