@@ -11,10 +11,10 @@ import { ServiceProviderDashboard } from './pages/ServiceProviderDashboard';
 import { HostProfilePage } from './pages/HostProfile';
 import { Messages } from './pages/Messages'; 
 import { AIChat } from './components/AIChat';
-import { MOCK_PROPERTIES, AI_SYSTEM_INSTRUCTION, AI_GUEST_INSTRUCTION, AI_HOST_LANDING_INSTRUCTION, AI_SERVICE_INSTRUCTION, MOCK_TASKS, MOCK_HOST_PROFILE } from './constants';
+import { MOCK_PROPERTIES, AI_SYSTEM_INSTRUCTION, AI_GUEST_INSTRUCTION, AI_HOST_BRAIN_INSTRUCTION, AI_SERVICE_INSTRUCTION, MOCK_TASKS, MOCK_HOST_PROFILE } from './constants';
 import { Property, DaySettings, Booking, SearchCriteria, UserRole, ServiceTask, AIAction, HostProfile } from './types';
-import { fetchProperties, savePropertyToDb } from './services/propertyService';
-import { createBooking, fetchGuestBookings, fetchPendingBookings } from './services/bookingService';
+import { fetchProperties, savePropertyToDb, updateCalendarDay } from './services/propertyService';
+import { createBooking, fetchGuestBookings, fetchPendingBookings, updateBookingStatus } from './services/bookingService';
 import { startConversation, sendMessage } from './services/chatService'; 
 import { Loader2, AlertTriangle, User, ShieldCheck, Sun, Moon, Briefcase } from 'lucide-react';
 import { signInAnonymously } from 'firebase/auth';
@@ -123,6 +123,11 @@ function App() {
                   if (updatedPreview) setPreviewProperty(updatedPreview);
               }
           }
+          // Also refresh bookings
+          if (userRole === UserRole.HOST) {
+              const bookings = await fetchPendingBookings();
+              setUserBookings(bookings);
+          }
       } catch (e) {
           console.error("Failed to refresh properties", e);
       }
@@ -167,12 +172,102 @@ function App() {
       await refreshProperties(); 
   };
 
-  const handleAIAction = (action: AIAction) => {
+  // --- HOST AI ACTION HANDLER ---
+  const handleAIAction = async (action: AIAction) => {
+      console.log("Processing AI Action:", action);
+      
       if (action.type === 'NAVIGATE') handleNavigate(action.payload);
       if (action.type === 'UPDATE_SEARCH') setSearchCriteria({ ...searchCriteria, ...action.payload });
+      
+      // Host Operations
+      if (action.type === 'UPDATE_PRICE') {
+          const { propertyId, price, date, startDate, endDate, applyTo } = action.payload;
+          
+          if (propertyId && price) {
+              const updates: DaySettings[] = [];
+
+              if (date) {
+                  // Single date
+                  updates.push({ date, price, status: 'available' });
+              } else if (startDate && endDate) {
+                  // Range
+                  let current = new Date(startDate);
+                  const end = new Date(endDate);
+                  
+                  while (current <= end) {
+                      const dayOfWeek = current.getDay(); // 0=Sun, 6=Sat
+                      const isWeekend = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6; // Fri, Sat, Sun definition in app
+                      
+                      let shouldUpdate = true;
+                      if (applyTo === 'weekdays' && isWeekend) shouldUpdate = false;
+                      if (applyTo === 'weekends' && !isWeekend) shouldUpdate = false;
+
+                      if (shouldUpdate) {
+                          updates.push({
+                              date: current.toISOString().split('T')[0],
+                              price,
+                              status: 'available'
+                          });
+                      }
+                      current.setDate(current.getDate() + 1);
+                  }
+              }
+
+              if (updates.length > 0) {
+                  await updateCalendarDay(propertyId, updates);
+                  await refreshProperties();
+              }
+          }
+      }
+
+      if (action.type === 'BLOCK_DATES') {
+          const { propertyId, startDate, endDate, reason } = action.payload;
+          if (propertyId && startDate && endDate) {
+              const start = new Date(startDate);
+              const end = new Date(endDate);
+              const updates: DaySettings[] = [];
+              while(start <= end) {
+                  updates.push({ 
+                      date: start.toISOString().split('T')[0], 
+                      status: 'blocked', 
+                      note: reason || 'Blocked by AI' 
+                  });
+                  start.setDate(start.getDate() + 1);
+              }
+              await updateCalendarDay(propertyId, updates);
+              await refreshProperties();
+          }
+      }
+
+      if (action.type === 'APPROVE_BOOKING') {
+          let { bookingId } = action.payload;
+          
+          // SMART FALLBACK: If ID is fuzzy or missing, find the first pending booking
+          if (!bookingId || bookingId === 'derived_from_context' || bookingId === 'mock_id') {
+              const pending = userBookings.find(b => b.status === 'pending');
+              if (pending) {
+                  bookingId = pending.id;
+                  console.log("AI Agent inferred booking ID:", bookingId);
+              } else {
+                  console.warn("AI Agent tried to approve but no pending bookings found.");
+                  return;
+              }
+          }
+
+          if (bookingId) {
+              // Find booking to get details
+              const booking = userBookings.find(b => b.id === bookingId) || { propertyId: '1', startDate: '2025-12-06', endDate: '2025-12-07' } as any; 
+              
+              if (booking) {
+                  try {
+                    await updateBookingStatus(bookingId, 'confirmed', booking.propertyId, booking.startDate, booking.endDate);
+                    await refreshProperties();
+                  } catch(e) { console.error(e); }
+              }
+          }
+      }
   };
 
-  // Fixed: Correctly sets activePage based on role to avoid blank screen
   const enterDashboard = () => {
       setViewMode('dashboard');
       if (userRole === UserRole.GUEST) {
@@ -195,26 +290,43 @@ function App() {
   const generateContext = () => {
     const common = {
         role: userRole === UserRole.HOST ? 'HOST' : 'GUEST',
+    };
+
+    // HOST CONTEXT - RICH DATA
+    if (userRole === UserRole.HOST) {
+        return JSON.stringify({ 
+            ...common,
+            portfolio: properties.map(p => ({ 
+                id: p.id, 
+                title: p.title, 
+                city: p.city,
+                basePrice: p.baseWeekdayPrice,
+                revenue: p.revenueLastMonth 
+            })),
+            pendingRequests: userBookings.map(b => ({
+                bookingId: b.id,
+                guest: b.guestName,
+                property: b.propertyName,
+                dates: `${b.startDate} to ${b.endDate}`,
+                total: b.totalPrice
+            })),
+            businessStats: {
+                totalRevenue: properties.reduce((sum, p) => sum + p.revenueLastMonth, 0),
+                avgOccupancy: 78 // Mock for context
+            }
+        });
+    }
+
+    // GUEST CONTEXT
+    return JSON.stringify({ 
+        ...common,
         userBookings: userBookings.map(b => ({
             id: b.id,
             property: b.propertyName,
             dates: `${b.startDate} to ${b.endDate}`,
             status: b.status,
             code: b.bookingCode
-        }))
-    };
-
-    if (viewMode === 'landing-chat') {
-        if (userRole === UserRole.HOST) return JSON.stringify({ ...common, role: 'HOST_LANDING', stats: { totalProperties: properties.length, revenue: 245000 } });
-        if (userRole === UserRole.SERVICE_PROVIDER) return JSON.stringify({ ...common, role: 'SERVICE_LANDING', pendingTasks: tasks.filter(t=>t.status==='pending').length });
-    }
-
-    if (userRole === UserRole.HOST) {
-        return JSON.stringify({ ...common, portfolio: properties.map(p => ({ id: p.id, title: p.title, revenue: p.revenueLastMonth })) });
-    }
-    return JSON.stringify({ 
-        ...common,
-        role: 'GUEST', 
+        })),
         properties: properties.map(p => ({ id: p.id, title: p.title, price: p.baseWeekdayPrice, city: p.city, amenities: p.amenities, chef: p.rules?.chefAvailable, meals: p.mealsAvailable, description: p.description?.substring(0, 100) })),
         currentView: activePage,
         searchCriteria
@@ -228,10 +340,10 @@ function App() {
       const timeContext = `\n\n[SYSTEM UPDATE]\nCURRENT SYSTEM DATE: ${dateString}\n\nINSTRUCTION: All relative dates (e.g. "next Friday", "December") refer to future dates starting from ${dateString}. Do not reference past years like 2023 or 2024 unless explicitly asked.`;
 
       if (viewMode === 'landing-chat') {
-          if (userRole === UserRole.HOST) return AI_HOST_LANDING_INSTRUCTION + timeContext;
+          if (userRole === UserRole.HOST) return AI_HOST_BRAIN_INSTRUCTION + timeContext;
           if (userRole === UserRole.SERVICE_PROVIDER) return AI_SERVICE_INSTRUCTION + timeContext;
       }
-      return (userRole === UserRole.HOST ? AI_SYSTEM_INSTRUCTION : AI_GUEST_INSTRUCTION) + timeContext;
+      return (userRole === UserRole.HOST ? AI_HOST_BRAIN_INSTRUCTION : AI_GUEST_INSTRUCTION) + timeContext;
   }
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black text-gray-900 dark:text-white"><Loader2 className="w-10 h-10 animate-spin" /></div>;
@@ -274,10 +386,27 @@ function App() {
             /* === 2. DASHBOARD VIEWS === */
             <>
                 {userRole === UserRole.HOST ? (
-                    <Layout activePage={activePage} onNavigate={handleNavigate}>
+                    <Layout 
+                        activePage={activePage} 
+                        onNavigate={handleNavigate} 
+                    >
                         {isEditorOpen ? <PropertyEditor initialData={editingProperty} onSave={handleSaveProperty} onCancel={() => setIsEditorOpen(false)} /> : (
                         <>
                             {activePage === 'dashboard' && <HostDashboard properties={properties} onNavigate={handleNavigate} onRefresh={refreshProperties} />}
+                            {activePage === 'ai-concierge' && (
+                                <div className="h-full flex flex-col">
+                                    <AIChat 
+                                        mode="fullscreen"
+                                        userRole={UserRole.HOST}
+                                        context={generateContext()} 
+                                        systemInstruction={getSystemInstruction()} 
+                                        properties={properties} 
+                                        onPreview={handlePreviewProperty} 
+                                        onBook={handleAiBooking} 
+                                        onAction={handleAIAction}
+                                    />
+                                </div>
+                            )}
                             {activePage === 'listings' && <PropertyList properties={properties} onEdit={handleEditProperty} onAddNew={handleAddNew} onPreview={handlePreviewProperty} />}
                             {activePage === 'calendar' && <CalendarManager properties={properties} onUpdateProperty={handleUpdateProperty} />}
                             {activePage === 'messages' && <Messages currentUserId={currentUserId} userRole={userRole} />} 
@@ -316,19 +445,6 @@ function App() {
             </>
         )}
       </div>
-      
-      {/* Floating Chat for HOST only (When in Dashboard mode) */}
-      {viewMode === 'dashboard' && userRole === UserRole.HOST && (
-          <AIChat 
-            mode="floating"
-            context={generateContext()} 
-            systemInstruction={AI_SYSTEM_INSTRUCTION} 
-            properties={properties} 
-            onPreview={handlePreviewProperty} 
-            onBook={handleAiBooking} 
-            onAction={handleAIAction}
-          />
-      )}
     </div>
   );
 }

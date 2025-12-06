@@ -12,9 +12,10 @@ import {
   Cell,
   CartesianGrid
 } from 'recharts';
-import { fetchPendingBookings, updateBookingStatus } from '../services/bookingService';
+import { fetchPendingBookings, updateBookingStatus, fetchHostBookings } from '../services/bookingService';
 import { startConversation } from '../services/chatService';
 import { BookingDetailsModal } from '../components/BookingDetailsModal';
+import { generateHostInsights } from '../services/aiService';
 
 interface HostDashboardProps {
   properties: Property[];
@@ -22,17 +23,20 @@ interface HostDashboardProps {
   onRefresh?: () => void; // Added for calendar sync
 }
 
-const RECENT_ACTIVITY = [
-    { id: 1, type: 'booking', title: 'New Booking', desc: 'Rahul S. • Saffron Villa', time: '2m ago', icon: Calendar, color: 'text-brand-500 bg-brand-50 dark:bg-brand-900/20' },
-    { id: 2, type: 'price', title: 'Price Update', desc: 'Weekend surge active', time: '1h ago', icon: IndianRupee, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' },
-    { id: 3, type: 'review', title: '5-Star Review', desc: 'Anjali G. • Heritage Haveli', time: '3h ago', icon: Star, color: 'text-gold-500 bg-gold-50 dark:bg-gold-900/20' },
-    { id: 4, type: 'maintenance', title: 'Maintenance', desc: 'Pool cleaning completed', time: '5h ago', icon: Wrench, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' },
-];
-
 export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavigate, onRefresh }) => {
-  const totalRevenue = properties.reduce((sum, p) => sum + p.revenueLastMonth, 0);
-  const avgOccupancy = Math.round(properties.reduce((sum, p) => sum + p.occupancyRate, 0) / (properties.length || 1));
+  // Stats State
+  const [stats, setStats] = useState({
+      revenue: 0,
+      occupancy: 0,
+      activeGuests: 0,
+      upcomingCheckins: 0
+  });
   
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [activityFeed, setActivityFeed] = useState<any[]>([]);
+  const [aiInsights, setAiInsights] = useState<any[]>([]);
+
+  // Booking Lists
   const [pendingBookings, setPendingBookings] = useState<Booking[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -40,28 +44,98 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
   // State for Modal
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
 
-  const loadPendingBookings = () => {
+  const loadData = async () => {
       setLoadingRequests(true);
-      fetchPendingBookings().then(bookings => {
-          const myPropertyIds = properties.map(p => p.id);
-          setPendingBookings(bookings.filter(b => myPropertyIds.includes(b.propertyId)));
-      }).finally(() => setLoadingRequests(false));
+      try {
+          // 1. Fetch ALL bookings for this host
+          const allBookings = await fetchHostBookings('host1'); // Using hardcoded host1 for demo consistency
+          
+          const pending = allBookings.filter(b => b.status === 'pending');
+          const confirmed = allBookings.filter(b => b.status === 'confirmed');
+          
+          setPendingBookings(pending);
+
+          // 2. Calculate Stats
+          const now = new Date();
+          const currentMonth = now.getMonth();
+          const todayStr = now.toISOString().split('T')[0];
+
+          // Revenue (Current Month)
+          const monthlyRevenue = confirmed
+              .filter(b => new Date(b.startDate).getMonth() === currentMonth)
+              .reduce((sum, b) => sum + b.totalPrice, 0);
+
+          // Active Guests (Today is between Start and End)
+          const active = confirmed
+              .filter(b => b.startDate <= todayStr && b.endDate > todayStr)
+              .reduce((sum, b) => sum + b.guestCount, 0);
+
+          // Upcoming Check-ins (Start date > today)
+          const upcoming = confirmed
+              .filter(b => b.startDate > todayStr)
+              .length;
+
+          // Occupancy (Simple approximation: booked nights / total nights in month * properties)
+          // For demo, we stick to property.occupancyRate average, or calc real
+          const avgOcc = Math.round(properties.reduce((sum, p) => sum + p.occupancyRate, 0) / (properties.length || 1));
+
+          setStats({
+              revenue: monthlyRevenue,
+              activeGuests: active,
+              upcomingCheckins: upcoming,
+              occupancy: avgOcc
+          });
+
+          // 3. Prepare Chart Data (Revenue per Property)
+          const cData = properties.map(p => {
+              const propRevenue = confirmed
+                  .filter(b => b.propertyId === p.id && new Date(b.startDate).getMonth() === currentMonth)
+                  .reduce((sum, b) => sum + b.totalPrice, 0);
+              return {
+                  name: p.title.length > 12 ? p.title.substring(0, 10) + '...' : p.title,
+                  revenue: propRevenue,
+                  occupancy: p.occupancyRate
+              };
+          });
+          setChartData(cData);
+
+          // 4. Activity Feed (Newest bookings)
+          const feed = allBookings
+              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+              .slice(0, 5)
+              .map(b => ({
+                  id: b.id,
+                  type: b.status === 'pending' ? 'request' : 'booking',
+                  title: b.status === 'pending' ? 'New Request' : 'Confirmed Booking',
+                  desc: `${b.guestName} • ${b.propertyName}`,
+                  time: new Date(b.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                  icon: Calendar,
+                  color: b.status === 'pending' ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'text-brand-500 bg-brand-50 dark:bg-brand-900/20'
+              }));
+          setActivityFeed(feed);
+
+          // 5. Generate Insights
+          const insights = await generateHostInsights(properties, confirmed);
+          setAiInsights(insights);
+
+      } catch (e) {
+          console.error("Dashboard load failed", e);
+      } finally {
+          setLoadingRequests(false);
+      }
   };
 
   useEffect(() => {
-      loadPendingBookings();
-  }, [properties]);
+      loadData();
+  }, [properties]); // Reload when properties change (or on refresh trigger)
 
   const handleRequestAction = async (booking: Booking, status: 'confirmed' | 'cancelled', e: React.MouseEvent) => {
       e.stopPropagation();
       setProcessingId(booking.id);
       try {
           await updateBookingStatus(booking.id, status, booking.propertyId, booking.startDate, booking.endDate);
-          // Refresh local list
-          setPendingBookings(prev => prev.filter(b => b.id !== booking.id));
-          // Refresh global state (Properties/Calendar)
+          loadData(); // Reload all data to update charts/stats
           if (onRefresh) onRefresh(); 
-          // Close modal if open
           setSelectedBooking(null);
       } catch (e) {
           alert("Failed to update status");
@@ -72,11 +146,10 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
 
   const handleMessageGuest = async (booking: Booking, e: React.MouseEvent) => {
       e.stopPropagation();
-      // Start conversation
       try {
            await startConversation(
-             'host1', // current host
-             booking.userId || 'guest_user_1', // guest id
+             'host1', 
+             booking.userId || 'guest_user_1', 
              booking.guestName || 'Guest',
              booking.guestAvatar || '',
              'Pine Stays',
@@ -88,12 +161,6 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
           console.error("Failed to start message", e);
       }
   };
-  
-  const chartData = properties.map(p => ({
-    name: p.title.length > 12 ? p.title.substring(0, 10) + '...' : p.title,
-    revenue: p.revenueLastMonth,
-    occupancy: p.occupancyRate
-  }));
 
   return (
     <div className="space-y-8 animate-fadeIn pb-20">
@@ -194,23 +261,23 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
         <StatCard 
           icon={<IndianRupee className="w-5 h-5 text-white" />} 
           title="Monthly Revenue" 
-          value={`₹${totalRevenue.toLocaleString()}`} 
-          trend="+12%" 
+          value={`₹${stats.revenue.toLocaleString()}`} 
+          trend="This Month" 
           bgGradient="bg-gradient-to-br from-emerald-500 to-emerald-600"
           shadowColor="shadow-emerald-500/20"
         />
         <StatCard 
           icon={<Activity className="w-5 h-5 text-white" />} 
           title="Avg. Occupancy" 
-          value={`${avgOccupancy}%`} 
-          trend="+5%" 
+          value={`${stats.occupancy}%`} 
+          trend="Portfolio" 
           bgGradient="bg-gradient-to-br from-brand-500 to-brand-600"
           shadowColor="shadow-brand-500/20"
         />
         <StatCard 
           icon={<Users className="w-5 h-5 text-white" />} 
           title="Active Guests" 
-          value="48" 
+          value={stats.activeGuests} 
           trend="Now" 
           bgGradient="bg-gradient-to-br from-blue-500 to-blue-600"
           shadowColor="shadow-blue-500/20"
@@ -218,7 +285,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
         <StatCard 
           icon={<Calendar className="w-5 h-5 text-white" />} 
           title="Upcoming" 
-          value="12" 
+          value={stats.upcomingCheckins} 
           trend="Check-ins" 
           bgGradient="bg-gradient-to-br from-gold-500 to-gold-600"
           shadowColor="shadow-gold-500/20"
@@ -234,8 +301,6 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
             </div>
             <select className="bg-gray-50 dark:bg-gray-800 border-none text-xs font-semibold rounded-lg px-3 py-2 outline-none text-gray-600 dark:text-gray-300 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                 <option>Last 30 Days</option>
-                <option>This Quarter</option>
-                <option>Year to Date</option>
             </select>
           </div>
           <div className="h-[320px] w-full">
@@ -266,7 +331,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
               </ResponsiveContainer>
             ) : (
               <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
-                No data available
+                No revenue data yet.
               </div>
             )}
           </div>
@@ -286,16 +351,16 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
                 </div>
                 
                 <div className="space-y-4 flex-1">
-                    <InsightItem 
-                        title="Diwali Demand Spike" 
-                        desc="Search volume up 40%. Consider raising rates by 15%."
-                        trend="up"
-                    />
-                    <InsightItem 
-                        title="WiFi Issue Detected" 
-                        desc="Sentiment analysis flagged 2 recent reviews."
-                        trend="down"
-                    />
+                    {aiInsights.length > 0 ? aiInsights.map((insight, i) => (
+                        <InsightItem 
+                            key={i}
+                            title={insight.title} 
+                            desc={insight.desc}
+                            trend={insight.trend}
+                        />
+                    )) : (
+                        <p className="text-gray-400 text-sm italic">Analyzing your portfolio...</p>
+                    )}
                 </div>
                 
                 <button 
@@ -316,9 +381,9 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
                     <button className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">View All</button>
                 </div>
                 <div className="space-y-6">
-                    {RECENT_ACTIVITY.map((item, i) => (
+                    {activityFeed.length > 0 ? activityFeed.map((item, i) => (
                         <div key={item.id} className="flex gap-4 relative">
-                            {i !== RECENT_ACTIVITY.length - 1 && (
+                            {i !== activityFeed.length - 1 && (
                                 <div className="absolute left-[19px] top-10 bottom-[-24px] w-0.5 bg-gray-100 dark:bg-white/5"></div>
                             )}
                             <div className={`w-10 h-10 rounded-full shrink-0 flex items-center justify-center border border-white/10 ${item.color} shadow-sm z-10`}>
@@ -332,7 +397,9 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">{item.desc}</p>
                             </div>
                         </div>
-                    ))}
+                    )) : (
+                        <p className="text-gray-400 text-sm italic text-center py-4">No recent activity.</p>
+                    )}
                 </div>
             </div>
         </div>
@@ -344,10 +411,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
               booking={selectedBooking}
               userRole={UserRole.HOST}
               onClose={() => setSelectedBooking(null)}
-              onUpdate={() => {
-                  loadPendingBookings();
-                  if (onRefresh) onRefresh();
-              }}
+              onUpdate={loadData}
           />
       )}
     </div>

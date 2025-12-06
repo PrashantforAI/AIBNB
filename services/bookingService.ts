@@ -1,6 +1,6 @@
 
 import { db } from '../firebaseConfig';
-import { collection, addDoc, doc, getDoc, updateDoc, query, getDocs, where } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc, query, getDocs, where, orderBy } from 'firebase/firestore';
 import { Booking, Property, DaySettings } from '../types';
 
 const BOOKING_COLLECTION = 'bookings';
@@ -249,6 +249,26 @@ export const fetchPendingBookings = async (): Promise<Booking[]> => {
         return bookings;
     } catch (error) {
         console.error("Error fetching pending bookings:", error);
+        return [];
+    }
+};
+
+export const fetchHostBookings = async (hostId: string): Promise<Booking[]> => {
+    try {
+        // In a real app we'd filter by hostId, but here we'll fetch all and filter client side 
+        // to match the demo data structure where hostId might be 'host1'
+        const q = query(collection(db, BOOKING_COLLECTION));
+        const querySnapshot = await getDocs(q);
+        const bookings: Booking[] = [];
+        querySnapshot.forEach((doc) => {
+            const data = doc.data() as Booking;
+            if (data.hostId === hostId) {
+                bookings.push({ ...data, id: doc.id });
+            }
+        });
+        return bookings;
+    } catch (error) {
+        console.error("Error fetching host bookings:", error);
         return [];
     }
 };

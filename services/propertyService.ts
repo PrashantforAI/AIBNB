@@ -1,7 +1,7 @@
 
 import { db } from '../firebaseConfig';
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { Property } from '../types';
+import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
+import { Property, DaySettings } from '../types';
 
 const COLLECTION_NAME = 'properties';
 
@@ -56,6 +56,32 @@ export const savePropertyToDb = async (property: Property) => {
     console.error("Error saving property: ", error);
     throw error;
   }
+};
+
+// Update specific calendar days (Used by AI Agent)
+export const updateCalendarDay = async (propertyId: string, updates: DaySettings[]) => {
+    try {
+        const propRef = doc(db, COLLECTION_NAME, propertyId);
+        const propSnap = await getDoc(propRef);
+        
+        if (!propSnap.exists()) throw new Error("Property not found");
+        
+        const property = propSnap.data() as Property;
+        const currentCalendar = property.calendar || {};
+        
+        updates.forEach(update => {
+            currentCalendar[update.date] = {
+                ...(currentCalendar[update.date] || {}),
+                ...update
+            };
+        });
+        
+        await updateDoc(propRef, { calendar: currentCalendar });
+        return true;
+    } catch (e) {
+        console.error("Failed to update calendar day", e);
+        throw e;
+    }
 };
 
 // Delete a property

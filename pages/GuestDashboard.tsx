@@ -1,8 +1,7 @@
 
-
 import React, { useState } from 'react';
 import { Property, Booking, SearchCriteria, AIAction, UserRole } from '../types';
-import { Compass, Calendar, Heart, Search, Sparkles, MessageSquare, Home, Waves, Crown, Tractor, Mountain, ArrowRight, Star, MapPin } from 'lucide-react';
+import { Compass, Calendar, Heart, Search, Sparkles, MessageSquare, Home, Waves, Crown, Tractor, Mountain, ArrowRight, Star, MapPin, Menu, LogOut, User } from 'lucide-react';
 import { fetchGuestBookings, isDateRangeAvailable, getUnavailableDates } from '../services/bookingService';
 import { AIChat } from '../components/AIChat';
 import { CalendarPopup } from '../components/CalendarPopup';
@@ -34,6 +33,7 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'explore' | 'chat' | 'trips' | 'messages' | 'wishlist'>('explore');
   const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
   const [activeCategory, setActiveCategory] = useState('all');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // --- ROBUST FILTERING LOGIC ---
   const filteredProperties = properties.filter(p => {
@@ -99,31 +99,58 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
     <div className="h-full bg-gray-50 dark:bg-black font-sans transition-colors duration-300 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="bg-white/80 dark:bg-black/80 backdrop-blur-xl sticky top-0 z-40 px-6 py-4 flex justify-between items-center border-b border-gray-100 dark:border-white/5 shrink-0">
+         {/* Logo */}
          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('explore')}>
              <div className="w-9 h-9 bg-black dark:bg-white rounded-xl flex items-center justify-center text-white dark:text-black font-bold text-lg shadow-md">A</div>
              <span className="font-bold text-lg text-gray-900 dark:text-white hidden sm:block tracking-tight">AI BNB</span>
          </div>
          
-         <div className="flex bg-gray-100 dark:bg-white/5 p-1 rounded-full overflow-x-auto scrollbar-hide max-w-[60vw]">
-            {[
-                { id: 'explore', icon: Compass, label: 'Explore' },
-                { id: 'chat', icon: Sparkles, label: 'Concierge' },
-                { id: 'trips', icon: Calendar, label: 'Trips' },
-                { id: 'messages', icon: MessageSquare, label: 'Inbox' },
-                { id: 'wishlist', icon: Heart, label: 'Saved' }
-            ].map(tab => (
-                <button 
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}
-                >
-                    <tab.icon className="w-4 h-4" />
-                    <span className="hidden sm:inline">{tab.label}</span>
-                </button>
-            ))}
+         {/* Right Side Menu */}
+         <div className="relative">
+            <button 
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="flex items-center gap-2 p-1 pl-3 pr-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full hover:shadow-md transition-all group"
+            >
+                <Menu className="w-4 h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white" />
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-700 to-gray-900 dark:from-gray-200 dark:to-white text-white dark:text-black flex items-center justify-center font-bold text-xs shadow-sm">
+                    G
+                </div>
+            </button>
+
+            {isMenuOpen && (
+                <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>
+                    <div className="absolute top-12 right-0 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50 animate-fadeIn origin-top-right">
+                        <div className="py-2">
+                            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 mb-2">
+                                <p className="text-sm font-bold text-gray-900 dark:text-white">Guest User</p>
+                                <p className="text-xs text-gray-500">guest@aibnb.com</p>
+                            </div>
+                            {[
+                                { id: 'explore', icon: Compass, label: 'Explore' },
+                                { id: 'chat', icon: Sparkles, label: 'AI Concierge' },
+                                { id: 'trips', icon: Calendar, label: 'Trips' },
+                                { id: 'messages', icon: MessageSquare, label: 'Inbox' },
+                                { id: 'wishlist', icon: Heart, label: 'Saved' }
+                            ].map(item => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => { setActiveTab(item.id as any); setIsMenuOpen(false); }}
+                                    className={`w-full text-left px-6 py-3 text-sm font-medium flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${activeTab === item.id ? 'text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border-l-2 border-gray-900 dark:border-white' : 'text-gray-600 dark:text-gray-400 border-l-2 border-transparent'}`}
+                                >
+                                    <item.icon className="w-4 h-4" />
+                                    {item.label}
+                                </button>
+                            ))}
+                            <div className="h-px bg-gray-100 dark:bg-gray-800 my-2"></div>
+                            <button className="w-full text-left px-6 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center gap-3">
+                                <LogOut className="w-4 h-4" /> Log out
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
          </div>
-         
-         <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-gray-700 to-gray-900 dark:from-gray-200 dark:to-white text-white dark:text-black flex items-center justify-center font-bold text-sm shadow-md">G</div>
       </div>
 
       <div className="flex-1 relative overflow-hidden flex flex-col">

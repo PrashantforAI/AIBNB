@@ -194,7 +194,7 @@ export interface ServiceTask {
 }
 
 export interface AIAction {
-    type: 'NAVIGATE' | 'UPDATE_SEARCH' | 'SET_ROLE';
+    type: 'NAVIGATE' | 'UPDATE_SEARCH' | 'SET_ROLE' | 'UPDATE_PRICE' | 'BLOCK_DATES' | 'APPROVE_BOOKING';
     payload: any;
 }
 

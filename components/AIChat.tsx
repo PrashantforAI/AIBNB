@@ -17,6 +17,9 @@ interface AIChatProps {
   onEnterDashboard?: () => void;
   mode?: 'floating' | 'fullscreen';
   userRole?: UserRole;
+  // Controlled props for external toggling
+  isOpen?: boolean;
+  onToggle?: (isOpen: boolean) => void;
 }
 
 // --- Property Card Component for Chat ---
@@ -258,14 +261,14 @@ const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promis
 
 const FormattedMessage = ({ text, properties, onPreview, onBook }: { text: string, properties?: Property[], onPreview?: (p: Property) => void, onBook?: (b: any) => Promise<void> }) => {
   const parts = text.split(/(\[PROPERTY: .+?\]|\[BOOKING_INTENT: .+?\])/g);
-  const isDemo = text.includes('Offline Demo Mode');
+  const isDemo = text.includes('Offline Agent Mode');
 
   return (
     <div className="text-[15px] leading-relaxed relative">
       {isDemo && (
           <div className="absolute -top-3 right-0">
               <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-yellow-200 dark:border-yellow-800 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" /> DEMO
+                  <AlertTriangle className="w-3 h-3" /> OFFLINE AGENT
               </span>
           </div>
       )}
@@ -313,9 +316,24 @@ export const AIChat: React.FC<AIChatProps> = ({
     onAction, 
     onEnterDashboard,
     mode = 'floating',
-    userRole = UserRole.GUEST
+    userRole = UserRole.GUEST,
+    isOpen: isOpenProp,
+    onToggle
 }) => {
-  const [isOpen, setIsOpen] = useState(mode === 'fullscreen');
+  const [internalIsOpen, setInternalIsOpen] = useState(mode === 'fullscreen');
+  
+  // Controlled vs Uncontrolled state logic
+  const isOpen = isOpenProp !== undefined ? isOpenProp : internalIsOpen;
+  
+  const toggleOpen = () => {
+      const newState = !isOpen;
+      if (onToggle) {
+          onToggle(newState);
+      } else {
+          setInternalIsOpen(newState);
+      }
+  };
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -330,7 +348,7 @@ export const AIChat: React.FC<AIChatProps> = ({
             setMessages([{
                 id: 'init',
                 role: 'model',
-                text: systemInstruction?.includes('HOST') ? 'Ready to assist.' : 'How can I help you plan your trip?',
+                text: systemInstruction?.includes('HOST') ? 'Ready to assist with your portfolio.' : 'How can I help you plan your trip?',
                 timestamp: new Date()
             }]);
         }
@@ -345,7 +363,7 @@ export const AIChat: React.FC<AIChatProps> = ({
       }
   }, [nudgeMessage]);
 
-  useEffect(() => { scrollToBottom(); }, [messages]);
+  useEffect(() => { scrollToBottom(); }, [messages, isOpen]); // Scroll when opened too
 
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
 
@@ -513,7 +531,7 @@ export const AIChat: React.FC<AIChatProps> = ({
              </div>
              <span className="font-bold text-gray-900 dark:text-white">AI Assistant</span>
            </div>
-           <button onClick={() => setIsOpen(false)} className="hover:bg-gray-100 dark:hover:bg-white/10 p-2 rounded-full transition-colors"><X className="w-4 h-4 text-gray-500" /></button>
+           <button onClick={() => toggleOpen()} className="hover:bg-gray-100 dark:hover:bg-white/10 p-2 rounded-full transition-colors"><X className="w-4 h-4 text-gray-500" /></button>
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -543,7 +561,7 @@ export const AIChat: React.FC<AIChatProps> = ({
       </div>
 
       <button 
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => toggleOpen()}
         className="group relative bg-black dark:bg-white hover:scale-105 text-white dark:text-black p-4 rounded-full shadow-2xl transition-all pointer-events-auto flex items-center gap-2 z-50"
       >
         <div className="absolute inset-0 bg-brand-500 blur-lg opacity-40 group-hover:opacity-60 transition-opacity rounded-full"></div>
