@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { sendMessageToAI, initializeChat, parseAIResponse } from '../services/aiService';
 import { ChatMessage, Property, AIAction, UserRole } from '../types';
-import { MessageSquare, X, Send, Sparkles, Loader2, Bot, ArrowRight, Star, CheckCircle, Calendar, MapPin, LayoutDashboard, Zap, AlertTriangle, Minus, Plus } from 'lucide-react';
+import { MessageSquare, X, Send, Sparkles, Loader2, Bot, ArrowRight, Star, CheckCircle, Calendar, MapPin, LayoutDashboard, Zap, AlertTriangle, Minus, Plus, Mic, StopCircle, Hotel } from 'lucide-react';
 import { CalendarPopup } from './CalendarPopup';
 import { getUnavailableDates } from '../services/bookingService';
 
@@ -17,85 +17,61 @@ interface AIChatProps {
   onEnterDashboard?: () => void;
   mode?: 'floating' | 'fullscreen';
   userRole?: UserRole;
-  // Controlled props for external toggling
+  userName?: string;
   isOpen?: boolean;
   onToggle?: (isOpen: boolean) => void;
+  onNavigate?: (page: string) => void;
 }
 
-// --- Property Card Component for Chat ---
 const ChatPropertyCard: React.FC<{ property: Property; onPreview: (p: Property) => void }> = ({ property, onPreview }) => {
   return (
-    <div className="glass-card rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl mt-4 mb-6 w-full max-w-sm group cursor-pointer transition-all duration-300 mx-auto md:mx-0 border border-gray-100 dark:border-white/10 bg-white dark:bg-gray-900">
-      <div className="h-40 bg-gray-200 dark:bg-gray-800 relative overflow-hidden">
-        <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-        
-        {/* Animated Guest Favorite Badge */}
-        {(property.rating || 0) >= 4.8 && (
-            <div className="absolute top-3 right-3 overflow-hidden rounded-full bg-white/90 dark:bg-black/80 backdrop-blur shadow-sm border border-white/20 z-10">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gold-200/50 dark:via-gold-400/20 to-transparent -translate-x-full animate-shimmer" />
-                <div className="relative px-2.5 py-1 flex items-center gap-1">
-                    <Star className="w-3 h-3 text-gold-500 fill-gold-500" /> 
-                    <span className="text-[10px] font-bold text-gray-900 dark:text-white">Guest favorite</span>
+    <div className="bg-white dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 w-full max-w-sm my-2 group cursor-pointer hover:border-gray-300 dark:hover:border-gray-700 transition-colors">
+      <div className="flex h-24">
+        <div className="w-24 h-full relative shrink-0">
+            <img src={property.images[0]} alt={property.title} className="w-full h-full object-cover" />
+        </div>
+        <div className="p-3 flex flex-col justify-between flex-1 min-w-0">
+            <div>
+                <h4 className="font-semibold text-gray-900 dark:text-white text-sm truncate">{property.title}</h4>
+                <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    <MapPin className="w-3 h-3" /> {property.city}
                 </div>
             </div>
-        )}
-
-      </div>
-      <div className="p-5">
-        <h4 className="font-bold text-gray-900 dark:text-white text-lg line-clamp-1">{property.title}</h4>
-        <div className="flex flex-wrap gap-2 mt-2 mb-4">
-             {property.amenities.slice(0, 3).map(am => (
-                 <span key={am} className="text-[10px] font-semibold bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 px-2 py-1 rounded-md border border-gray-200 dark:border-white/5">{am}</span>
-             ))}
-        </div>
-        <div className="flex justify-between items-center pt-3 border-t border-gray-100 dark:border-white/5">
-          <div>
-              <span className="font-bold text-lg text-gray-900 dark:text-white">₹{property.baseWeekdayPrice?.toLocaleString() || '0'}</span>
-              <span className="text-xs text-gray-500 dark:text-gray-400"> / night</span>
-          </div>
-          <button 
-            onClick={() => onPreview(property)}
-            className="bg-gray-900 dark:bg-white text-white dark:text-black px-4 py-2 rounded-xl text-xs font-bold hover:opacity-90 transition-opacity flex items-center gap-2"
-          >
-             View <ArrowRight className="w-3 h-3" />
-          </button>
+            <div className="flex justify-between items-center mt-1">
+                <span className="font-medium text-xs text-gray-900 dark:text-white">₹{property.baseWeekdayPrice?.toLocaleString()} <span className="text-gray-500 font-normal">/ night</span></span>
+                <button 
+                    onClick={() => onPreview(property)}
+                    className="text-[10px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white px-2.5 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                >
+                    View
+                </button>
+            </div>
         </div>
       </div>
     </div>
   );
 };
 
-// --- Booking Proposal Card ---
 const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promise<void>; properties?: Property[] }> = ({ proposal, onBook, properties }) => {
     const [status, setStatus] = useState<'idle' | 'loading' | 'confirmed'>('idle');
-    
-    // Hydrate details
     const propertyDetails = properties?.find(p => p.id === proposal.propertyId);
     
-    // Editable State
+    // State
     const [checkIn, setCheckIn] = useState(proposal.startDate);
     const [checkOut, setCheckOut] = useState(proposal.endDate);
     const [guests, setGuests] = useState<number>(proposal.guests || 2);
     const [currentPrice, setCurrentPrice] = useState<number>(proposal.totalPrice || 0);
-    
     const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | null>(null);
 
-    const displayTitle = propertyDetails?.title || proposal.propertyName || 'Unknown Property';
-    const displayImage = propertyDetails?.images[0];
+    const displayTitle = propertyDetails?.title || proposal.propertyName || 'Property';
     const maxGuests = propertyDetails?.maxGuests || 10;
     const unavailableDates = propertyDetails ? getUnavailableDates(propertyDetails) : new Set<string>();
 
-    // Price Calculation Logic (Replicated from GuestDetails for interactivity)
     useEffect(() => {
         if (!propertyDetails || !checkIn || !checkOut) return;
-        
         const start = new Date(checkIn);
         const end = new Date(checkOut);
-        
-        if (start >= end) {
-            setCurrentPrice(0);
-            return;
-        }
+        if (start >= end) { setCurrentPrice(0); return; }
 
         const days = [];
         let dt = new Date(start);
@@ -109,16 +85,9 @@ const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promis
             const isWeekend = d.getDay() === 0 || d.getDay() === 5 || d.getDay() === 6;
             baseTotal += isWeekend ? propertyDetails.baseWeekendPrice : propertyDetails.baseWeekdayPrice;
         });
-        
-        const nights = days.length;
-        const extraGuests = Math.max(0, guests - propertyDetails.baseGuests);
-        const extraFee = extraGuests * (propertyDetails.extraGuestPrice || 0) * nights;
-        
-        const serviceFee = Math.round((baseTotal + extraFee) * 0.08);
-        const taxes = Math.round((baseTotal + extraFee + serviceFee) * 0.18);
-        
-        setCurrentPrice(baseTotal + extraFee + serviceFee + taxes);
-
+        const extraFee = Math.max(0, guests - propertyDetails.baseGuests) * (propertyDetails.extraGuestPrice || 0) * days.length;
+        const fees = Math.round((baseTotal + extraFee) * 0.26); // Taxes
+        setCurrentPrice(baseTotal + extraFee + fees);
     }, [checkIn, checkOut, guests, propertyDetails]);
 
     const handleConfirm = async () => {
@@ -132,127 +101,68 @@ const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promis
                 endDate: checkOut,
                 guests: guests,
                 totalPrice: currentPrice,
-                thumbnail: displayImage || 'https://via.placeholder.com/150' 
+                thumbnail: propertyDetails?.images[0] 
             });
             setStatus('confirmed');
-        } catch (e) {
-            setStatus('idle');
-            alert('Booking failed. Try again.');
-        }
+        } catch (e) { setStatus('idle'); }
     };
 
-    if (status === 'confirmed') {
-        return (
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-3xl p-6 mt-4 mb-4 max-w-sm flex flex-col items-center text-center mx-auto md:mx-0">
-                <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-800/50 rounded-full flex items-center justify-center mb-3">
-                    <CheckCircle className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <h4 className="font-bold text-emerald-900 dark:text-emerald-300 text-lg">Trip Confirmed!</h4>
-                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">Pack your bags for {displayTitle}.</p>
-            </div>
-        );
-    }
-
-    const today = new Date().toISOString().split('T')[0];
+    if (status === 'confirmed') return (
+        <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800 text-center my-2 max-w-sm flex items-center justify-center gap-2">
+            <CheckCircle className="w-4 h-4 text-green-600" />
+            <span className="text-sm font-medium text-green-800 dark:text-green-300">Booking request sent</span>
+        </div>
+    );
 
     return (
-        <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-white/10 shadow-xl mt-4 mb-4 max-w-sm overflow-visible mx-auto md:mx-0 relative z-10">
-            <div className="bg-gradient-to-r from-brand-50 to-white dark:from-brand-900/20 dark:to-gray-900 p-4 border-b border-gray-100 dark:border-white/5 flex items-center gap-3 rounded-t-3xl">
-                <div className="p-2 bg-brand-100 dark:bg-brand-900/40 rounded-xl text-brand-600 dark:text-brand-300"><Calendar className="w-5 h-5" /></div>
-                <h4 className="font-bold text-gray-900 dark:text-white">Ready to book?</h4>
-            </div>
-            
-            {displayImage && (
-                <div className="h-32 w-full overflow-hidden relative">
-                    <img src={displayImage} alt={displayTitle} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-4">
-                        <span className="text-white font-bold text-sm shadow-sm">{displayTitle}</span>
-                    </div>
+        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm my-3 max-w-sm overflow-visible relative z-10 p-4">
+            <div className="flex items-center gap-3 mb-3 pb-3 border-b border-gray-100 dark:border-gray-800">
+                <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg"><Hotel className="w-4 h-4 text-gray-600 dark:text-gray-300"/></div>
+                <div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">Ready to book?</div>
+                    <div className="text-sm font-bold text-gray-900 dark:text-white truncate max-w-[200px]">{displayTitle}</div>
                 </div>
-            )}
+            </div>
 
-            <div className="p-5 space-y-4">
-                {!displayImage && <div className="text-lg font-bold text-gray-900 dark:text-white">{displayTitle}</div>}
-                
-                <div className="grid grid-cols-2 gap-3 relative">
-                    {/* Check In */}
-                    <div 
-                        className={`bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border transition-all cursor-pointer ${activePicker === 'checkIn' ? 'border-brand-500 ring-1 ring-brand-500' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300'}`}
-                        onClick={() => setActivePicker('checkIn')}
-                    >
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider block mb-1">Check-in</span>
-                        <div className={`font-semibold text-sm truncate ${checkIn ? 'text-gray-900 dark:text-white' : 'text-gray-400 italic'}`}>
-                            {checkIn || 'Select Date'}
-                        </div>
+            <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2 relative">
+                    <div onClick={() => setActivePicker('checkIn')} className="bg-gray-50 dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-700 cursor-pointer">
+                        <label className="text-[9px] text-gray-500 uppercase font-bold block">Check-in</label>
+                        <div className="text-xs font-semibold dark:text-white truncate">{checkIn || 'Select'}</div>
                     </div>
-
-                    {/* Check Out */}
-                    <div 
-                        className={`bg-gray-50 dark:bg-gray-800/50 p-3 rounded-xl border transition-all cursor-pointer ${activePicker === 'checkOut' ? 'border-brand-500 ring-1 ring-brand-500' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300'}`}
-                        onClick={() => setActivePicker('checkOut')}
-                    >
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold tracking-wider block mb-1">Check-out</span>
-                        <div className={`font-semibold text-sm truncate ${checkOut ? 'text-gray-900 dark:text-white' : 'text-gray-400 italic'}`}>
-                            {checkOut || 'Select Date'}
-                        </div>
+                    <div onClick={() => setActivePicker('checkOut')} className="bg-gray-50 dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-700 cursor-pointer">
+                        <label className="text-[9px] text-gray-500 uppercase font-bold block">Check-out</label>
+                        <div className="text-xs font-semibold dark:text-white truncate">{checkOut || 'Select'}</div>
                     </div>
-
-                    {/* Popup Calendar */}
                     {activePicker && (
                         <div className="absolute top-[110%] left-0 right-0 z-50">
                             <CalendarPopup 
                                 selectedDate={activePicker === 'checkIn' ? checkIn : checkOut}
-                                startDate={checkIn}
-                                endDate={checkOut}
-                                minDate={activePicker === 'checkOut' ? (checkIn || today) : today}
+                                startDate={checkIn} endDate={checkOut}
+                                minDate={activePicker === 'checkOut' ? (checkIn || new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0]}
                                 unavailableDates={unavailableDates}
                                 onSelect={(d) => {
-                                    if (activePicker === 'checkIn') {
-                                        setCheckIn(d);
-                                        setActivePicker('checkOut');
-                                    } else {
-                                        setCheckOut(d);
-                                        setActivePicker(null);
-                                    }
+                                    if (activePicker === 'checkIn') { setCheckIn(d); setActivePicker('checkOut'); } 
+                                    else { setCheckOut(d); setActivePicker(null); }
                                 }}
                                 onClose={() => setActivePicker(null)}
-                                className="shadow-2xl ring-2 ring-black/5"
+                                className="shadow-xl border border-gray-200 dark:border-gray-700"
                             />
                         </div>
                     )}
                 </div>
-
-                {/* Guest Count Edit */}
-                <div className="flex justify-between items-center px-1 pt-2 border-t border-gray-100 dark:border-white/5">
-                    <div className="flex items-center gap-3">
-                        <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">Guests</span>
-                        <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
-                            <button 
-                                onClick={() => setGuests(Math.max(1, guests - 1))}
-                                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white dark:hover:bg-gray-700 shadow-sm transition-all"
-                                disabled={guests <= 1}
-                            >
-                                <Minus className="w-3 h-3 text-gray-600 dark:text-gray-300" />
-                            </button>
-                            <span className="text-xs font-bold w-4 text-center text-gray-900 dark:text-white">{guests}</span>
-                            <button 
-                                onClick={() => setGuests(Math.min(maxGuests, guests + 1))}
-                                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white dark:hover:bg-gray-700 shadow-sm transition-all"
-                                disabled={guests >= maxGuests}
-                            >
-                                <Plus className="w-3 h-3 text-gray-600 dark:text-gray-300" />
-                            </button>
-                        </div>
+                
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded px-2 py-1 border border-gray-200 dark:border-gray-700">
+                        <button onClick={() => setGuests(Math.max(1, guests - 1))} className="w-4 h-4 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 rounded"><Minus className="w-3 h-3"/></button>
+                        <span className="text-xs font-bold w-4 text-center dark:text-white">{guests}</span>
+                        <button onClick={() => setGuests(Math.min(maxGuests, guests + 1))} className="w-4 h-4 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 rounded"><Plus className="w-3 h-3"/></button>
                     </div>
-                    <span className="text-xl font-bold text-brand-600 dark:text-brand-400">₹{currentPrice?.toLocaleString() || '0'}</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">Total: ₹{currentPrice?.toLocaleString()}</span>
                 </div>
 
-                <button 
-                    onClick={handleConfirm}
-                    disabled={status === 'loading' || !checkIn || !checkOut}
-                    className="w-full mt-2 bg-gray-900 dark:bg-white hover:bg-black dark:hover:bg-gray-100 text-white dark:text-black py-3.5 rounded-xl font-bold transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : (!checkIn || !checkOut ? 'Select Dates' : 'Confirm Reservation')}
+                <button onClick={handleConfirm} disabled={status === 'loading'} className="w-full bg-black dark:bg-white text-white dark:text-black py-2 rounded-lg text-xs font-bold hover:opacity-90 transition-opacity">
+                    {status === 'loading' ? 'Processing...' : 'Confirm Request'}
                 </button>
             </div>
         </div>
@@ -260,44 +170,39 @@ const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promis
 };
 
 const FormattedMessage = ({ text, properties, onPreview, onBook }: { text: string, properties?: Property[], onPreview?: (p: Property) => void, onBook?: (b: any) => Promise<void> }) => {
-  const parts = text.split(/(\[PROPERTY: .+?\]|\[BOOKING_INTENT: .+?\])/g);
-  const isDemo = text.includes('Offline Agent Mode');
-
+  const parts = text.split(/(\[PROPERTY: .+?\]|\[BOOKING_INTENT: .+?\]|\[ACTION: .+?\])/g);
+  
   return (
-    <div className="text-[15px] leading-relaxed relative">
-      {isDemo && (
-          <div className="absolute -top-3 right-0">
-              <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-yellow-200 dark:border-yellow-800 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" /> OFFLINE AGENT
-              </span>
-          </div>
-      )}
+    <div className="text-sm text-gray-800 dark:text-gray-200 space-y-2 leading-relaxed">
       {parts.map((part, index) => {
         const propMatch = part.match(/^\[PROPERTY: (.+?)\]$/);
         if (propMatch && properties && onPreview) {
-          const propertyId = propMatch[1];
-          const property = properties.find(p => p.id === propertyId);
+          const property = properties.find(p => p.id === propMatch[1]);
           return property ? <ChatPropertyCard key={index} property={property} onPreview={onPreview} /> : null;
         }
-
+        
         const bookingMatch = part.match(/^\[BOOKING_INTENT: (.+?)\]$/);
         if (bookingMatch) {
-            try {
-                return <BookingProposalCard key={index} proposal={JSON.parse(bookingMatch[1])} onBook={onBook} properties={properties} />;
-            } catch (e) { return null; }
+            try { return <BookingProposalCard key={index} proposal={JSON.parse(bookingMatch[1])} onBook={onBook} properties={properties} />; } 
+            catch (e) { return null; }
         }
+
+        const actionMatch = part.match(/^\[ACTION: (.+?)\]$/);
+        if (actionMatch) return null; // Hide raw actions from UI
         
-        const lines = part.split('\n');
+        if (!part.trim()) return null;
+
+        // Simple Markdown-ish parsing
         return (
             <div key={index}>
-                {lines.map((line, i) => {
-                    if (!line.trim()) return <br key={i}/>;
-                    if (line.trim().startsWith('- ')) return <li key={i} className="ml-4 list-disc marker:text-gray-400 mb-1">{line.replace('- ', '')}</li>;
-                    if (line.includes('**')) {
-                        const chunks = line.split('**');
-                        return <p key={i} className="mb-2">{chunks.map((c, j) => j % 2 === 1 ? <strong key={j} className="text-gray-900 dark:text-white font-bold">{c}</strong> : c)}</p>;
-                    }
-                    return <p key={i} className="mb-2">{line}</p>;
+                {part.split('\n').map((line, i) => {
+                    if (!line.trim()) return <div key={i} className="h-2" />;
+                    const bolded = line.split(/(\*\*.*?\*\*)/g).map((chunk, j) => 
+                        chunk.startsWith('**') && chunk.endsWith('**') 
+                        ? <strong key={j} className="font-semibold text-gray-900 dark:text-white">{chunk.slice(2, -2)}</strong> 
+                        : chunk
+                    );
+                    return <p key={i} className="mb-1">{bolded}</p>;
                 })}
             </div>
         );
@@ -309,7 +214,6 @@ const FormattedMessage = ({ text, properties, onPreview, onBook }: { text: strin
 export const AIChat: React.FC<AIChatProps> = ({ 
     context, 
     systemInstruction, 
-    nudgeMessage, 
     properties, 
     onPreview, 
     onBook, 
@@ -317,54 +221,36 @@ export const AIChat: React.FC<AIChatProps> = ({
     onEnterDashboard,
     mode = 'floating',
     userRole = UserRole.GUEST,
+    userName = 'Guest',
     isOpen: isOpenProp,
     onToggle
 }) => {
   const [internalIsOpen, setInternalIsOpen] = useState(mode === 'fullscreen');
-  
-  // Controlled vs Uncontrolled state logic
   const isOpen = isOpenProp !== undefined ? isOpenProp : internalIsOpen;
   
   const toggleOpen = () => {
       const newState = !isOpen;
-      if (onToggle) {
-          onToggle(newState);
-      } else {
-          setInternalIsOpen(newState);
-      }
+      onToggle ? onToggle(newState) : setInternalIsOpen(newState);
   };
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasInitialized = useRef(false);
 
   useEffect(() => {
-    if (!hasInitialized.current || messages.length === 0) {
-        if (mode === 'fullscreen' && messages.length === 0) {
-            // Zero State handles greeting
-        } else {
-            setMessages([{
-                id: 'init',
-                role: 'model',
-                text: systemInstruction?.includes('HOST') ? 'Ready to assist with your portfolio.' : 'How can I help you plan your trip?',
-                timestamp: new Date()
-            }]);
+    if (!hasInitialized.current) {
+        if (mode !== 'fullscreen' && messages.length === 0) {
+             setMessages([{ id: 'init', role: 'model', text: 'How can I assist you?', timestamp: new Date() }]);
         }
         initializeChat(systemInstruction);
         hasInitialized.current = true;
     }
   }, [systemInstruction, mode]);
 
-  useEffect(() => {
-      if (nudgeMessage) {
-          setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', text: nudgeMessage!, timestamp: new Date() }]);
-      }
-  }, [nudgeMessage]);
-
-  useEffect(() => { scrollToBottom(); }, [messages, isOpen]); // Scroll when opened too
-
+  useEffect(() => { scrollToBottom(); }, [messages, isOpen]);
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
 
   const handleSend = async (textOverride?: string) => {
@@ -387,188 +273,187 @@ export const AIChat: React.FC<AIChatProps> = ({
     setIsLoading(false);
   };
 
-  // --- FULLSCREEN MODE (ALL ROLES) ---
+  const startListening = () => {
+    // @ts-ignore
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => setIsListening(true);
+        recognition.onresult = (event: any) => {
+            const transcript = event.results[0][0].transcript;
+            setInput(prev => prev + (prev ? ' ' : '') + transcript);
+        };
+        recognition.onerror = () => setIsListening(false);
+        recognition.onend = () => setIsListening(false);
+        recognition.start();
+    } else {
+        alert("Voice input not supported in this browser.");
+    }
+  };
+
+  const suggestions = userRole === UserRole.HOST 
+    ? ["Analyze revenue", "Update pricing", "Show bookings", "Go to Dashboard"]
+    : ["Luxury villa", "Pet-friendly stays", "Weekend ideas", "Budget homes"];
+
+  // --- MINIMAL FULLSCREEN UI (Google AI Studio Style) ---
   if (mode === 'fullscreen') {
       const isZeroState = messages.length === 0;
-      
-      const roleConfig = {
-          [UserRole.HOST]: {
-              title: "Welcome back, Host.",
-              subtitle: "I've analyzed your portfolio. What would you like to do?",
-              prompts: ["Analyze my revenue trends", "Update Saffron Villa pricing", "Show upcoming bookings", "Go to Dashboard"]
-          },
-          [UserRole.GUEST]: {
-              title: "Where to next?",
-              subtitle: "I'm your AI concierge. Tell me what you're dreaming of.",
-              prompts: ["Luxury villa in Lonavala for 6", "Pet-friendly stays with a pool", "Weekend getaway near Mumbai", "Budget homes in Jaipur"]
-          },
-          [UserRole.SERVICE_PROVIDER]: {
-              title: "Field Ops",
-              subtitle: "Ready to manage tasks and reports.",
-              prompts: ["Show today's tasks", "Report maintenance issue", "Check schedule"]
-          }
-      }[userRole];
 
       return (
-          <div className="flex flex-col h-full w-full relative bg-gray-50 dark:bg-black font-sans">
-              {/* Top Bar for Fullscreen */}
-              <div className="absolute top-0 right-0 p-6 z-50">
-                  {onEnterDashboard && (
-                      <button 
-                        onClick={onEnterDashboard}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-white/80 dark:bg-gray-900/80 backdrop-blur border border-gray-200 dark:border-white/10 rounded-full shadow-sm hover:bg-white dark:hover:bg-gray-800 transition-colors text-sm font-semibold text-gray-900 dark:text-white"
-                      >
-                          <LayoutDashboard className="w-4 h-4" /> Dashboard
+          <div className="flex flex-col h-full w-full relative bg-white dark:bg-black font-sans">
+              {/* Minimal Top Bar */}
+              {onEnterDashboard && (
+                  <div className="absolute top-6 right-6 z-50">
+                      <button onClick={onEnterDashboard} className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-xs font-semibold text-gray-900 dark:text-white transition-colors">
+                          <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
                       </button>
-                  )}
-              </div>
+                  </div>
+              )}
 
-              {/* Message Container - Removed scrollbar-hide to ensure usability on desktop */}
-              <div className="flex-1 overflow-y-auto p-4 pb-40">
-                  <div className="max-w-3xl mx-auto w-full">
-                  {isZeroState ? (
-                      <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] text-center space-y-8 animate-fadeIn">
-                          <div className="w-20 h-20 bg-gradient-to-tr from-brand-400 to-gray-500 rounded-3xl flex items-center justify-center mb-4 shadow-2xl shadow-brand-500/30 rotate-3">
-                              <Sparkles className="w-10 h-10 text-white" />
-                          </div>
-                          <h1 className="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-gray-900 via-gray-700 to-gray-900 dark:from-white dark:via-gray-200 dark:to-gray-400 tracking-tighter">
-                              {roleConfig.title}
-                          </h1>
-                          <p className="text-xl text-gray-500 dark:text-gray-400 max-w-lg font-light leading-relaxed">
-                              {roleConfig.subtitle}
-                          </p>
-                          
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl mt-8">
-                              {roleConfig.prompts.map((prompt, i) => (
-                                  <button 
-                                    key={i}
-                                    onClick={() => prompt.includes('Dashboard') && onEnterDashboard ? onEnterDashboard() : handleSend(prompt)}
-                                    className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-gray-100 dark:border-white/10 hover:border-brand-300 dark:hover:border-brand-500 hover:bg-gray-50 dark:hover:bg-white/10 transition-all text-left group"
-                                  >
-                                      <div className="flex justify-between items-center mb-1">
-                                         <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{prompt}</span>
-                                         <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all text-brand-500" />
-                                      </div>
-                                  </button>
-                              ))}
-                          </div>
-                      </div>
-                  ) : (
-                      <div className="space-y-10 py-10">
-                          {messages.map((msg) => (
-                              <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slideUp`}>
-                                  {msg.role === 'model' && (
-                                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shrink-0 shadow-lg mt-1">
-                                          <Sparkles className="w-4 h-4 text-white" />
-                                      </div>
-                                  )}
-                                  <div className={`max-w-[85%] md:max-w-[75%] ${msg.role === 'user' ? 'bg-gray-100 dark:bg-white/10 rounded-2xl rounded-tr-sm px-6 py-4 text-gray-900 dark:text-white font-medium' : 'text-gray-800 dark:text-gray-200 px-1'}`}>
-                                      {msg.role === 'user' ? (
-                                          msg.text
-                                      ) : (
-                                          <FormattedMessage text={msg.text} properties={properties} onPreview={onPreview} onBook={onBook} />
-                                      )}
-                                  </div>
-                              </div>
-                          ))}
-                          {isLoading && (
-                              <div className="flex gap-4 animate-fadeIn">
-                                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shrink-0 shadow-lg">
-                                      <Loader2 className="w-4 h-4 text-white animate-spin" />
-                                  </div>
-                                  <div className="flex items-center gap-1 text-gray-400 dark:text-gray-500 text-sm h-8">
-                                      <span className="animate-pulse">Thinking</span>
-                                      <span className="animate-pulse delay-75">.</span>
-                                      <span className="animate-pulse delay-150">.</span>
-                                      <span className="animate-pulse delay-300">.</span>
-                                  </div>
-                              </div>
-                          )}
-                          <div ref={messagesEndRef} />
-                      </div>
-                  )}
+              {/* Chat Area - Scrollable Container */}
+              <div className="flex-1 overflow-y-auto p-4 w-full">
+                  <div className="max-w-3xl mx-auto w-full min-h-full flex flex-col justify-center">
+                    {isZeroState ? (
+                        <div className="flex flex-col items-center justify-center text-center opacity-0 animate-fadeIn my-auto" style={{ animationDelay: '0.1s', opacity: 1 }}>
+                            <div className="mb-4">
+                                <Sparkles className="w-8 h-8 text-brand-500" />
+                            </div>
+                            <h1 className="text-3xl font-medium text-gray-900 dark:text-white tracking-tight mb-2">
+                                Welcome, <span className="text-brand-600 dark:text-brand-400">{userName}</span>
+                            </h1>
+                            <p className="text-gray-400 dark:text-gray-500">How can I help you today?</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-10 py-10 w-full">
+                            {messages.map((msg) => (
+                                <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    {msg.role === 'model' && (
+                                        <div className="w-6 h-6 rounded-full bg-brand-600 flex items-center justify-center shrink-0 mt-1">
+                                            <Sparkles className="w-3 h-3 text-white" />
+                                        </div>
+                                    )}
+                                    <div className={`max-w-[85%] ${msg.role === 'user' ? 'bg-gray-100 dark:bg-gray-800 rounded-2xl px-5 py-3 text-gray-900 dark:text-white' : 'text-gray-900 dark:text-gray-100 pt-1 leading-relaxed'}`}>
+                                        {msg.role === 'user' ? msg.text : <FormattedMessage text={msg.text} properties={properties} onPreview={onPreview} onBook={onBook} />}
+                                    </div>
+                                </div>
+                            ))}
+                            {isLoading && (
+                                <div className="flex gap-4">
+                                    <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center shrink-0 animate-pulse">
+                                        <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                                    </div>
+                                    <div className="text-sm text-gray-400 pt-1.5">Thinking...</div>
+                                </div>
+                            )}
+                            <div ref={messagesEndRef} />
+                        </div>
+                    )}
                   </div>
               </div>
 
-              {/* Minimal Floating Input */}
-              <div className="absolute bottom-8 left-0 right-0 px-4 flex justify-center z-50 pointer-events-none">
-                  <div className="w-full max-w-2xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-2xl border border-gray-200 dark:border-white/10 rounded-[2rem] shadow-2xl p-2 flex items-center gap-2 transition-all focus-within:ring-2 focus-within:ring-brand-500/30 focus-within:border-brand-500/50 hover:border-gray-300 dark:hover:border-white/20 pointer-events-auto">
-                      <div className="pl-4 pr-2">
-                          <Zap className="w-5 h-5 text-brand-500" />
+              {/* Bottom Input Area - Fixed Footer */}
+              <div className="shrink-0 bg-white dark:bg-black pb-8 pt-4 px-4 z-40 w-full">
+                  <div className="max-w-3xl mx-auto w-full space-y-3">
+                      
+                      {/* Suggestions Pills (Above Input) */}
+                      {isZeroState && (
+                          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide justify-center">
+                              {suggestions.map((prompt, i) => (
+                                  <button
+                                    key={i}
+                                    onClick={() => prompt.includes('Dashboard') && onEnterDashboard ? onEnterDashboard() : handleSend(prompt)}
+                                    className="whitespace-nowrap px-4 py-1.5 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-800 rounded-full text-xs font-medium text-gray-600 dark:text-gray-400 transition-colors"
+                                  >
+                                      {prompt}
+                                  </button>
+                              ))}
+                          </div>
+                      )}
+
+                      {/* Clean Input Box */}
+                      <div className="relative flex items-end gap-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-2xl px-2 py-2 transition-all focus-within:bg-white dark:focus-within:bg-black focus-within:ring-1 focus-within:ring-brand-500/20 shadow-sm">
+                          <textarea 
+                            className="flex-1 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 px-3 py-3 text-sm resize-none min-h-[48px] max-h-[120px]"
+                            placeholder="Ask anything..."
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSend();
+                                }
+                            }}
+                            rows={1}
+                            autoFocus
+                          />
+                          
+                          <button
+                            onClick={startListening}
+                            className={`mb-1 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-transparent text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}
+                            title="Voice Chat"
+                          >
+                              <Mic className="w-5 h-5" />
+                          </button>
+
+                          <button 
+                            onClick={() => handleSend()}
+                            disabled={!input.trim() || isLoading}
+                            className="mb-1 w-10 h-10 bg-black dark:bg-white hover:opacity-80 text-white dark:text-black rounded-xl flex items-center justify-center transition-all disabled:opacity-30 disabled:bg-gray-300 dark:disabled:bg-gray-700"
+                          >
+                              <ArrowRight className="w-5 h-5" />
+                          </button>
                       </div>
-                      <input 
-                        className="flex-1 bg-transparent border-none outline-none text-gray-900 dark:text-white placeholder-gray-400 px-2 py-3 text-base font-medium"
-                        placeholder="Ask anything..."
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        autoFocus
-                      />
-                      <button 
-                        onClick={() => handleSend()}
-                        disabled={!input.trim() || isLoading}
-                        className="bg-black dark:bg-white hover:opacity-80 text-white dark:text-black p-3 rounded-full transition-all disabled:opacity-50 disabled:scale-90 shadow-md flex items-center justify-center"
-                      >
-                          <ArrowRight className="w-5 h-5" />
-                      </button>
+                      <p className="text-[10px] text-center text-gray-400 dark:text-gray-600">
+                          AI can make mistakes. Check important info.
+                      </p>
                   </div>
               </div>
           </div>
       );
   }
 
-  // --- FLOATING MODE ---
+  // --- FLOATING MODE (Sidebar/Modal) ---
   return (
-    <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end pointer-events-none font-sans">
-      <div 
-        className={`bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl shadow-2xl rounded-3xl w-[calc(100vw-2rem)] sm:w-[26rem] mb-4 overflow-hidden transition-all duration-400 ease-in-out pointer-events-auto border border-white/20 dark:border-white/10 ring-1 ring-black/5 ${isOpen ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-10 scale-95 h-0'}`}
-        style={{ maxHeight: 'calc(80vh - 100px)', display: isOpen ? 'flex' : 'none', flexDirection: 'column' }}
-      >
-        <div className="p-4 flex justify-between items-center border-b border-gray-100 dark:border-white/5 bg-white/50 dark:bg-white/5">
-           <div className="flex items-center gap-3">
-             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-md">
-                <Sparkles className="w-4 h-4 text-white" />
-             </div>
-             <span className="font-bold text-gray-900 dark:text-white">AI Assistant</span>
-           </div>
-           <button onClick={() => toggleOpen()} className="hover:bg-gray-100 dark:hover:bg-white/10 p-2 rounded-full transition-colors"><X className="w-4 h-4 text-gray-500" /></button>
+    <div className={`flex flex-col h-full bg-white dark:bg-gray-900 ${isOpen ? 'flex' : 'hidden'} md:flex`}>
+        {/* Simple Header for Sidebar Mode */}
+        <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
+             <Sparkles className="w-4 h-4 text-brand-500" />
+             <span className="font-bold text-sm text-gray-900 dark:text-white">AI Assistant</span>
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+             {messages.length === 0 && (
+                 <div className="text-center py-10 text-gray-400 text-sm">
+                     <p>How can I help you manage your property today?</p>
+                 </div>
+             )}
              {messages.map((msg) => (
                 <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-200'}`}>
+                    <div className={`max-w-[90%] px-3 py-2 rounded-xl text-sm ${msg.role === 'user' ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'}`}>
                         {msg.role === 'user' ? msg.text : <FormattedMessage text={msg.text} properties={properties} />}
                     </div>
                 </div>
              ))}
-             {isLoading && <div className="text-xs text-gray-400 pl-2 animate-pulse">Thinking...</div>}
+             {isLoading && <div className="text-xs text-gray-400 pl-1">Thinking...</div>}
              <div ref={messagesEndRef} />
         </div>
 
-        <div className="p-3 bg-white/50 dark:bg-black/20 border-t border-gray-100 dark:border-white/5">
-            <div className="flex items-center gap-2 bg-gray-100 dark:bg-white/5 rounded-2xl px-2 py-1 border border-transparent focus-within:border-brand-500/50 focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
+        <div className="p-3 border-t border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 rounded-xl px-2 py-1 border border-gray-200 dark:border-gray-700">
                 <input 
-                    className="bg-transparent flex-1 outline-none text-sm text-gray-900 dark:text-white px-2 py-2.5"
-                    placeholder="Ask..."
+                    className="bg-transparent flex-1 outline-none text-sm text-gray-900 dark:text-white px-2 py-2"
+                    placeholder="Message..."
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 />
-                <button onClick={() => handleSend()} className="p-2 bg-black dark:bg-white text-white dark:text-black rounded-xl hover:opacity-90 transition-opacity"><ArrowRight className="w-4 h-4" /></button>
+                <button onClick={() => handleSend()} className="p-1.5 text-gray-500 hover:text-black dark:hover:text-white"><ArrowRight className="w-4 h-4" /></button>
             </div>
         </div>
-      </div>
-
-      <button 
-        onClick={() => toggleOpen()}
-        className="group relative bg-black dark:bg-white hover:scale-105 text-white dark:text-black p-4 rounded-full shadow-2xl transition-all pointer-events-auto flex items-center gap-2 z-50"
-      >
-        <div className="absolute inset-0 bg-brand-500 blur-lg opacity-40 group-hover:opacity-60 transition-opacity rounded-full"></div>
-        <div className="relative flex items-center justify-center">
-            {isOpen ? <X className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />}
-        </div>
-      </button>
     </div>
   );
 };

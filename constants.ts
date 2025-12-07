@@ -1,4 +1,5 @@
 
+
 import { Property, PropertyType, ServiceTask, HostProfile, Conversation } from './types';
 
 export const AI_SYSTEM_INSTRUCTION = `You are the AI Brain of AI BNB. 
@@ -121,7 +122,15 @@ export const AI_MESSAGE_REGULATOR_INSTRUCTION = `You are a Content Safety Modera
 **OUTPUT**: Return a JSON object: { "safe": boolean, "reason": string }.
 - If safe, reason is "Message looks good.".
 - If unsafe, reason explains what was blocked (e.g., "Phone number detected", "Email detected").
-**STRICTNESS**: High. We want to keep communication on the platform.`;
+**STRICTNESS**: High. We want to keep communication on the platform.
+**OBFUSCATION DETECTION**:
+- Users often try to hide phone numbers using code words or spacing.
+- DETECT patterns like:
+  - "99 apples, 87 bananas..." (Numbers hidden in counts)
+  - "call me at nine eight double one..."
+  - "8 8 2 1 9 0..." (Spaced out numbers)
+- **DISTRIBUTED NUMBERS**: Watch out for users sending single digits or small groups of numbers across multiple messages to form a phone number.
+- If you detect any string of numbers (digits or words) that resembles a phone number (10 digits in India), MARK AS UNSAFE.`;
 
 // Helper to generate a date string YYYY-MM-DD
 const getDate = (offset: number) => {
@@ -234,6 +243,8 @@ export const MOCK_CONVERSATIONS: Conversation[] = [
         lastMessage: 'Is early check-in possible?',
         lastMessageTime: '10:30 AM',
         unreadCount: 2,
+        hostUnreadCount: 2,
+        guestUnreadCount: 0,
         messages: [
             { id: 'm1', senderId: 'guest', text: 'Hi, I booked Saffron Villa for next weekend.', timestamp: '10:00 AM', status: 'read' },
             { id: 'm2', senderId: 'guest', text: 'Is early check-in possible?', timestamp: '10:30 AM', status: 'sent' }
@@ -252,6 +263,8 @@ export const MOCK_CONVERSATIONS: Conversation[] = [
         lastMessage: 'Great, thanks!',
         lastMessageTime: 'Yesterday',
         unreadCount: 0,
+        hostUnreadCount: 0,
+        guestUnreadCount: 0,
         messages: [
             { id: 'm1', senderId: 'host', text: 'Yes, breakfast is included.', timestamp: 'Yesterday', status: 'read' },
             { id: 'm2', senderId: 'guest', text: 'Great, thanks!', timestamp: 'Yesterday', status: 'read' }

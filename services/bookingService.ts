@@ -2,9 +2,11 @@
 import { db } from '../firebaseConfig';
 import { collection, addDoc, doc, getDoc, updateDoc, query, getDocs, where, orderBy } from 'firebase/firestore';
 import { Booking, Property, DaySettings } from '../types';
+import { startConversation, updateConversationBooking } from './chatService';
 
 const BOOKING_COLLECTION = 'bookings';
 const PROPERTY_COLLECTION = 'properties';
+const CONV_COLLECTION = 'conversations';
 
 export const getDatesInRange = (startDate: string, endDate: string) => {
     const dates = [];
@@ -142,6 +144,29 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status' |
             calendar: updatedCalendar
         });
 
+        // 4. Update Chat Context
+        try {
+            await startConversation(
+                rawBooking.hostId,
+                rawBooking.userId || 'guest_user_1',
+                rawBooking.guestName,
+                rawBooking.guestAvatar,
+                rawBooking.hostName,
+                rawBooking.hostAvatar,
+                property.title,
+                {
+                    bookingId: bookingId,
+                    bookingStatus: 'pending',
+                    startDate: rawBooking.startDate,
+                    endDate: rawBooking.endDate,
+                    guestCount: rawBooking.guestCount,
+                    totalPrice: rawBooking.totalPrice
+                }
+            );
+        } catch (chatError) {
+            console.warn("Failed to sync booking to chat", chatError);
+        }
+
         return bookingId;
     } catch (error) {
         console.error("Error creating booking:", error);
@@ -217,6 +242,24 @@ export const updateBookingStatus = async (bookingId: string, status: 'confirmed'
              
              await updateDoc(propertyRef, { calendar });
         }
+
+        // 3. Update Chat Context
+        try {
+            // Find the conversation related to this booking (if any)
+            const q = query(
+                collection(db, CONV_COLLECTION),
+                where('bookingId', '==', bookingId)
+            );
+            const snaps = await getDocs(q);
+            snaps.forEach(async (docSnap) => {
+                await updateConversationBooking(docSnap.id, {
+                    bookingStatus: status
+                });
+            });
+        } catch (chatError) {
+            console.warn("Failed to sync booking status to chat", chatError);
+        }
+
     } catch (error) {
         console.error("Error updating booking status:", error);
         throw error;

@@ -16,6 +16,7 @@ import { Property, DaySettings, Booking, SearchCriteria, UserRole, ServiceTask, 
 import { fetchProperties, savePropertyToDb, updateCalendarDay } from './services/propertyService';
 import { createBooking, fetchGuestBookings, fetchPendingBookings, updateBookingStatus } from './services/bookingService';
 import { startConversation, sendMessage } from './services/chatService'; 
+import { fetchUserProfile, saveUserProfile } from './services/userService';
 import { Loader2, AlertTriangle, User, ShieldCheck, Sun, Moon, Briefcase } from 'lucide-react';
 import { signInAnonymously } from 'firebase/auth';
 import { auth } from './firebaseConfig';
@@ -33,20 +34,37 @@ function App() {
   
   const [userRole, setUserRole] = useState<UserRole>(UserRole.GUEST); 
   const [tasks, setTasks] = useState<ServiceTask[]>(MOCK_TASKS);
+  
+  // HOST PROFILE STATE
   const [hostProfile, setHostProfile] = useState<HostProfile>(MOCK_HOST_PROFILE);
+  
+  // GUEST PROFILE STATE
+  const [guestProfile, setGuestProfile] = useState<HostProfile>({
+      id: 'guest_user_1',
+      name: 'Rahul Sharma',
+      avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=100',
+      isSuperhost: false,
+      joinedDate: 'December 2024',
+      bio: 'Travel enthusiast looking for unique stays.',
+      languages: ['English', 'Hindi'],
+      responseRate: 100,
+      responseTime: 'within an hour',
+      reviewsCount: 0,
+      rating: 5.0,
+      verified: true
+  });
+
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   // New state to hold user bookings for AI context
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
 
   const currentUserId = userRole === UserRole.HOST ? 'host1' : userRole === UserRole.GUEST ? 'guest_user_1' : 'sp1';
-  // Hardcoded for demo identity consistency
-  const currentUserName = userRole === UserRole.HOST ? 'Pine Stays' : userRole === UserRole.GUEST ? 'Rahul Sharma' : 'Service Provider';
+  
+  const currentUserName = userRole === UserRole.HOST ? hostProfile.name : guestProfile.name;
   const currentUserAvatar = userRole === UserRole.HOST 
-      ? MOCK_HOST_PROFILE.avatar 
-      : userRole === UserRole.GUEST 
-          ? 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=100'
-          : 'https://via.placeholder.com/100';
+      ? hostProfile.avatar 
+      : guestProfile.avatar;
 
   const [searchCriteria, setSearchCriteria] = useState<SearchCriteria>({
       location: '', checkIn: '', checkOut: '', adults: 2, children: 0
@@ -91,13 +109,43 @@ function App() {
           } catch(e) {}
       }
 
+      // LOAD USER PROFILE from Firestore (Persistence)
+      let activeHostProfile = MOCK_HOST_PROFILE;
+      let activeGuestProfile = guestProfile;
+
+      try {
+          const profile = await fetchUserProfile(currentUserId);
+          if (profile) {
+              if (userRole === UserRole.HOST) {
+                  setHostProfile(profile);
+                  activeHostProfile = profile;
+              }
+              if (userRole === UserRole.GUEST) {
+                  setGuestProfile(profile);
+                  activeGuestProfile = profile;
+              }
+          } else {
+              // First time load: Save the mock/default to DB so it exists for future fetch
+              const initial = userRole === UserRole.HOST ? MOCK_HOST_PROFILE : guestProfile;
+              // Add a slight bio change for new profiles to differentiate
+              const profileToSave = { ...initial, id: currentUserId };
+              await saveUserProfile(currentUserId, userRole, profileToSave);
+              if (userRole === UserRole.HOST) activeHostProfile = profileToSave;
+              else activeGuestProfile = profileToSave;
+          }
+      } catch(e) { console.error("Profile load error", e); }
+
+      // Ensure Initial Conversation exists between default Host and Guest
+      // We use the just-fetched profiles to ensure names match DB
       if (userRole === UserRole.HOST || userRole === UserRole.GUEST) {
           try {
              const cid = await startConversation(
-                 'host1', 'guest_user_1', 'Rahul Sharma', 
-                 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=100',
-                 'Pine Stays',
-                 MOCK_HOST_PROFILE.avatar,
+                 'host1', 
+                 'guest_user_1', 
+                 activeGuestProfile.name, // Use latest name
+                 activeGuestProfile.avatar,
+                 activeHostProfile.name, // Use latest name 
+                 activeHostProfile.avatar,
                  'Saffron Villa'
              );
           } catch(e) { console.log('Seeding convo skipped/failed', e); }
@@ -123,9 +171,12 @@ function App() {
                   if (updatedPreview) setPreviewProperty(updatedPreview);
               }
           }
-          // Also refresh bookings
+          // Also refresh bookings to reflect profile changes in booking lists
           if (userRole === UserRole.HOST) {
               const bookings = await fetchPendingBookings();
+              setUserBookings(bookings);
+          } else {
+              const bookings = await fetchGuestBookings();
               setUserBookings(bookings);
           }
       } catch (e) {
@@ -283,8 +334,20 @@ function App() {
       setActivePage('host-profile');
   };
 
-  const handleSaveProfile = (updatedProfile: HostProfile) => {
-      setHostProfile(updatedProfile);
+  // UPDATED: PERSIST PROFILE AND UPDATE APP STATE
+  const handleSaveProfile = async (updatedProfile: HostProfile) => {
+      // 1. Update Local State for immediate UI feedback
+      if (userRole === UserRole.HOST) setHostProfile(updatedProfile);
+      else setGuestProfile(updatedProfile);
+
+      // 2. Persist to DB and Propagate to Bookings/Chats/Calendars
+      try {
+          await saveUserProfile(updatedProfile.id, userRole, updatedProfile);
+          await refreshProperties(); // Refresh to show updates in calendar and lists
+      } catch (e) {
+          console.error("Failed to save profile to DB", e);
+          alert("Profile saved locally, but failed to sync to server.");
+      }
   };
 
   const generateContext = () => {
@@ -356,13 +419,15 @@ function App() {
           <button onClick={toggleTheme} className="w-12 h-12 rounded-full shadow-lg border border-white/20 bg-white/80 dark:bg-gray-900/80 backdrop-blur text-black dark:text-yellow-400 flex items-center justify-center hover:scale-110 transition-transform">
              <Sun className="w-5 h-5 hidden dark:block"/><Moon className="w-5 h-5 block dark:hidden"/>
           </button>
+          
           <button onClick={() => {
-              const next = userRole === UserRole.HOST ? UserRole.GUEST : userRole === UserRole.GUEST ? UserRole.SERVICE_PROVIDER : UserRole.HOST;
+              // TOGGLE LOGIC: Only Host <-> Guest (Service Mode Removed)
+              const next = userRole === UserRole.HOST ? UserRole.GUEST : UserRole.HOST;
               setUserRole(next);
               setViewMode('landing-chat'); 
-              setActivePage(next === UserRole.HOST ? 'dashboard' : next === UserRole.GUEST ? 'guest-dashboard' : 'service-provider-dashboard');
+              setActivePage(next === UserRole.HOST ? 'dashboard' : 'guest-dashboard');
           }} className="flex items-center gap-2 px-4 py-3 rounded-full shadow-lg border border-white/20 bg-white/80 dark:bg-gray-900/80 backdrop-blur text-sm font-bold hover:scale-105 transition-transform">
-             {userRole === UserRole.HOST ? 'Host Mode' : userRole === UserRole.GUEST ? 'Guest Mode' : 'Service Mode'}
+             {userRole === UserRole.HOST ? 'Switch to Guest' : 'Switch to Host'}
           </button>
       </div>
 
@@ -373,6 +438,7 @@ function App() {
              <AIChat 
                 mode="fullscreen"
                 userRole={userRole}
+                userName={currentUserName}
                 context={generateContext()}
                 systemInstruction={getSystemInstruction()}
                 onEnterDashboard={enterDashboard}
@@ -388,7 +454,10 @@ function App() {
                 {userRole === UserRole.HOST ? (
                     <Layout 
                         activePage={activePage} 
-                        onNavigate={handleNavigate} 
+                        onNavigate={handleNavigate}
+                        userAvatar={hostProfile.avatar}
+                        userName={hostProfile.name}
+                        currentUserId={currentUserId}
                     >
                         {isEditorOpen ? <PropertyEditor initialData={editingProperty} onSave={handleSaveProperty} onCancel={() => setIsEditorOpen(false)} /> : (
                         <>
@@ -398,6 +467,7 @@ function App() {
                                     <AIChat 
                                         mode="fullscreen"
                                         userRole={UserRole.HOST}
+                                        userName={hostProfile.name}
                                         context={generateContext()} 
                                         systemInstruction={getSystemInstruction()} 
                                         properties={properties} 
@@ -428,18 +498,21 @@ function App() {
                                 systemInstruction={getSystemInstruction()}
                                 onBook={handleAiBooking}
                                 onAction={handleAIAction}
+                                guestProfile={guestProfile}
+                                onUpdateProfile={handleSaveProfile} // Use the robust save handler
                             />
                         )}
 
                         {activePage === 'guest-view' && previewProperty && <GuestPropertyDetails property={previewProperty} onBack={() => setActivePage('guest-dashboard')} onViewHost={handleViewHost} hostName={hostProfile.name} hostAvatar={hostProfile.avatar} onBookingSuccess={refreshProperties} guestName={currentUserName} guestAvatar={currentUserAvatar} />}
                         
                         {activePage === 'host-profile' && (
-                            <HostProfilePage profile={hostProfile} isEditable={false} onBack={() => previewProperty ? setActivePage('guest-view') : setActivePage('guest-dashboard')} currentUserId={currentUserId} />
+                            <HostProfilePage profile={hostProfile} isEditable={false} onBack={() => previewProperty ? setActivePage('guest-view') : setActivePage('guest-dashboard')} currentUserId={currentUserId} currentUserName={currentUserName} currentUserAvatar={currentUserAvatar} />
                         )}
                     </>
                 ) : (
+                    // Service Mode Fallback (Hidden in toggle but kept for safety if state persists)
                     <Layout activePage={activePage} onNavigate={handleNavigate}>
-                        <ServiceProviderDashboard tasks={tasks} />
+                        <div className="p-8 text-center">Service Mode is currently unavailable.</div>
                     </Layout>
                 )}
             </>

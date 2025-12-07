@@ -1,22 +1,39 @@
 
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Home, List, Calendar, Settings, LogOut, Menu, X, UserCircle, MessageSquare, Hexagon, Sparkles } from 'lucide-react';
+import { subscribeToConversations } from '../services/chatService';
 
 interface LayoutProps {
   children: React.ReactNode;
   activePage: string;
   onNavigate: (page: string) => void;
+  userAvatar?: string;
+  userName?: string;
+  currentUserId?: string;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, userAvatar, userName, currentUserId }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    // Subscribe to conversations to sum up Host Unread Counts
+    const unsubscribe = subscribeToConversations(currentUserId, (convs) => {
+        // Count CONVERSATIONS with unread messages, not total messages
+        const count = convs.filter(c => (c.hostUnreadCount || 0) > 0).length;
+        setUnreadCount(count);
+    });
+    return () => unsubscribe();
+  }, [currentUserId]);
 
   const menuItems = [
     { id: 'dashboard', icon: Home, label: 'Overview' },
     { id: 'ai-concierge', icon: Sparkles, label: 'AI Concierge' },
     { id: 'listings', icon: List, label: 'Properties' },
     { id: 'calendar', icon: Calendar, label: 'Calendar' },
-    { id: 'messages', icon: MessageSquare, label: 'Messages' },
+    { id: 'messages', icon: MessageSquare, label: 'Messages', badge: unreadCount },
     { id: 'profile', icon: UserCircle, label: 'Profile' },
     { id: 'settings', icon: Settings, label: 'Settings' },
   ];
@@ -38,12 +55,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate
          <div className="relative">
             <button 
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="flex items-center gap-2 p-1 pl-3 pr-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full hover:shadow-md transition-all group"
+                className="flex items-center gap-2 p-1 pl-3 pr-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full hover:shadow-md transition-all group relative"
             >
                 <Menu className="w-4 h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white" />
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-brand-800 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                    H
-                </div>
+                {unreadCount > 0 && (
+                    <div className="absolute top-0 left-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+                )}
+                {userAvatar ? (
+                    <img src={userAvatar} alt="Profile" className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700" />
+                ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-brand-800 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                        H
+                    </div>
+                )}
             </button>
 
             {isMenuOpen && (
@@ -52,7 +76,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate
                     <div className="absolute top-12 right-0 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50 animate-fadeIn origin-top-right">
                         <div className="py-2">
                             <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 mb-2">
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">Pine Stays</p>
+                                <p className="text-sm font-bold text-gray-900 dark:text-white">{userName || 'Pine Stays'}</p>
                                 <p className="text-xs text-gray-500">Superhost</p>
                             </div>
                             {menuItems.map(item => (
@@ -61,7 +85,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate
                                     onClick={() => { onNavigate(item.id); setIsMenuOpen(false); }}
                                     className={`w-full text-left px-6 py-3 text-sm font-medium flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${activePage === item.id ? 'text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border-l-2 border-gray-900 dark:border-white' : 'text-gray-600 dark:text-gray-400 border-l-2 border-transparent'}`}
                                 >
-                                    <item.icon className="w-4 h-4" />
+                                    <div className="relative">
+                                        <item.icon className="w-4 h-4" />
+                                        {item.badge ? (
+                                            <div className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[9px] font-bold px-1.5 rounded-full min-w-[16px] text-center border border-white dark:border-gray-900">
+                                                {item.badge}
+                                            </div>
+                                        ) : null}
+                                    </div>
                                     {item.label}
                                 </button>
                             ))}

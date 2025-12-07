@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Property, DaySettings } from '../types';
-import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2, Dog, Clock, Ban, Calendar as CalendarIcon, X, Sparkles } from 'lucide-react';
+import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2, Dog, Clock, Ban, Calendar as CalendarIcon, X, Sparkles, MessageSquare } from 'lucide-react';
 import { AMENITIES_LIST } from '../constants';
 import { createBooking, getUnavailableDates } from '../services/bookingService';
+import { startConversation } from '../services/chatService';
 import { CalendarPopup } from '../components/CalendarPopup';
 
 interface GuestPropertyDetailsProps {
@@ -24,6 +25,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
   const [isBooking, setIsBooking] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isMessaging, setIsMessaging] = useState(false);
   
   const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
 
@@ -90,6 +92,37 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
         setShowConfirmation(false);
     } finally {
         setIsBooking(false);
+    }
+  };
+
+  const handleMessageHost = async () => {
+    if (!checkIn || !checkOut) {
+        alert("Please select dates before inquiring to help the host understand your request.");
+        return;
+    }
+    setIsMessaging(true);
+    try {
+        await startConversation(
+            property.hostId || 'host1',
+            'guest_user_1', // In a real app, this comes from AuthContext
+            guestName,
+            guestAvatar || '',
+            hostName,
+            hostAvatar || '',
+            property.title,
+            {
+                bookingStatus: 'inquiry',
+                startDate: checkIn,
+                endDate: checkOut,
+                guestCount: guests,
+                totalPrice: grandTotal
+            }
+        );
+        alert("Inquiry started! Go to your Inbox to chat.");
+    } catch (e) {
+        console.error("Failed to start message", e);
+    } finally {
+        setIsMessaging(false);
     }
   };
 
@@ -308,13 +341,22 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                         </div>
                     </div>
 
-                    <button 
-                        onClick={initiateBooking}
-                        disabled={!totalNights || isBooking}
-                        className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold text-lg py-3.5 rounded-xl transition-transform active:scale-95 shadow-lg shadow-brand-200 dark:shadow-none disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2"
-                    >
-                        {totalNights ? 'Request to Book' : 'Check Availability'}
-                    </button>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handleMessageHost}
+                            disabled={isMessaging}
+                            className="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white font-bold text-sm py-3.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                            <MessageSquare className="w-4 h-4" /> Message
+                        </button>
+                        <button 
+                            onClick={initiateBooking}
+                            disabled={!totalNights || isBooking}
+                            className="flex-[2] bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm py-3.5 rounded-xl transition-transform active:scale-95 shadow-lg shadow-brand-200 dark:shadow-none disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2"
+                        >
+                            {totalNights ? 'Request to Book' : 'Check Availability'}
+                        </button>
+                    </div>
 
                     {totalNights > 0 && (
                         <div className="mt-6 space-y-3 bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700">

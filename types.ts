@@ -239,6 +239,19 @@ export interface Conversation {
 
     lastMessage: string;
     lastMessageTime: any;
-    unreadCount: number;
+    
+    // Unread Counts
+    unreadCount: number; // @deprecated
+    hostUnreadCount: number;
+    guestUnreadCount: number;
+
     messages?: any[];
+
+    // Booking Context
+    bookingId?: string;
+    bookingStatus?: 'inquiry' | 'pending' | 'confirmed' | 'cancelled' | 'completed';
+    startDate?: string;
+    endDate?: string;
+    guestCount?: number;
+    totalPrice?: number;
 }

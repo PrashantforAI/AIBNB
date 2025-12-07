@@ -11,10 +11,20 @@ interface HostProfileProps {
     isEditable?: boolean;
     onSave?: (profile: HostProfile) => void;
     onBack?: () => void;
-    currentUserId?: string; // Add this
+    currentUserId?: string;
+    currentUserName?: string;
+    currentUserAvatar?: string;
 }
 
-export const HostProfilePage: React.FC<HostProfileProps> = ({ profile, isEditable = false, onSave, onBack, currentUserId = 'guest_user_1' }) => {
+export const HostProfilePage: React.FC<HostProfileProps> = ({ 
+    profile, 
+    isEditable = false, 
+    onSave, 
+    onBack, 
+    currentUserId = 'guest_user_1',
+    currentUserName = 'Guest',
+    currentUserAvatar = 'https://via.placeholder.com/100'
+}) => {
     const [editMode, setEditMode] = useState(false);
     const [formData, setFormData] = useState<HostProfile>(profile);
     
@@ -43,11 +53,11 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({ profile, isEditabl
                 const convId = await startConversation(
                     profile.id, 
                     currentUserId, 
-                    'Guest User', // Placeholder for current user name
-                    'https://via.placeholder.com/100', 
+                    currentUserName || 'Guest', 
+                    currentUserAvatar || '', 
                     profile.name, 
                     profile.avatar,
-                    'Property Inquiry'
+                    'General Inquiry' // Default to General if no property context known
                 );
                 await sendMessage(convId, currentUserId, UserRole.GUEST, messageText);
 

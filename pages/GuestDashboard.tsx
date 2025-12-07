@@ -1,12 +1,15 @@
 
-import React, { useState } from 'react';
-import { Property, Booking, SearchCriteria, AIAction, UserRole } from '../types';
+
+import React, { useState, useEffect } from 'react';
+import { Property, Booking, SearchCriteria, AIAction, UserRole, HostProfile } from '../types';
 import { Compass, Calendar, Heart, Search, Sparkles, MessageSquare, Home, Waves, Crown, Tractor, Mountain, ArrowRight, Star, MapPin, Menu, LogOut, User } from 'lucide-react';
 import { fetchGuestBookings, isDateRangeAvailable, getUnavailableDates } from '../services/bookingService';
 import { AIChat } from '../components/AIChat';
 import { CalendarPopup } from '../components/CalendarPopup';
 import { BookingDetailsModal } from '../components/BookingDetailsModal';
 import { Messages } from './Messages';
+import { HostProfilePage } from './HostProfile';
+import { subscribeToConversations } from '../services/chatService';
 
 interface GuestDashboardProps {
   properties: Property[];
@@ -18,6 +21,8 @@ interface GuestDashboardProps {
   systemInstruction?: string;
   onBook?: (booking: any) => Promise<void>;
   onAction?: (action: AIAction) => void;
+  guestProfile?: HostProfile;
+  onUpdateProfile?: (p: HostProfile) => void;
 }
 
 export const GuestDashboard: React.FC<GuestDashboardProps> = ({ 
@@ -28,12 +33,26 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
     context: globalContext,
     systemInstruction,
     onBook,
-    onAction
+    onAction,
+    guestProfile,
+    onUpdateProfile
 }) => {
-  const [activeTab, setActiveTab] = useState<'explore' | 'chat' | 'trips' | 'messages' | 'wishlist'>('explore');
+  const [activeTab, setActiveTab] = useState<'explore' | 'chat' | 'trips' | 'messages' | 'wishlist' | 'profile'>('explore');
   const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
   const [activeCategory, setActiveCategory] = useState('all');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!guestProfile?.id) return;
+    // Subscribe to conversations to sum up Guest Unread Counts
+    const unsubscribe = subscribeToConversations(guestProfile.id, (convs) => {
+        // Count CONVERSATIONS with unread messages, not total messages
+        const count = convs.filter(c => (c.guestUnreadCount || 0) > 0).length;
+        setUnreadCount(count);
+    });
+    return () => unsubscribe();
+  }, [guestProfile?.id]);
 
   // --- ROBUST FILTERING LOGIC ---
   const filteredProperties = properties.filter(p => {
@@ -109,12 +128,19 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
          <div className="relative">
             <button 
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="flex items-center gap-2 p-1 pl-3 pr-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full hover:shadow-md transition-all group"
+                className="flex items-center gap-2 p-1 pl-3 pr-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full hover:shadow-md transition-all group relative"
             >
                 <Menu className="w-4 h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white" />
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-700 to-gray-900 dark:from-gray-200 dark:to-white text-white dark:text-black flex items-center justify-center font-bold text-xs shadow-sm">
-                    G
-                </div>
+                {unreadCount > 0 && (
+                    <div className="absolute top-0 left-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-900"></div>
+                )}
+                {guestProfile?.avatar ? (
+                    <img src={guestProfile.avatar} alt="Profile" className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700" />
+                ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-700 to-gray-900 dark:from-gray-200 dark:to-white text-white dark:text-black flex items-center justify-center font-bold text-xs shadow-sm">
+                        G
+                    </div>
+                )}
             </button>
 
             {isMenuOpen && (
@@ -123,22 +149,30 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                     <div className="absolute top-12 right-0 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50 animate-fadeIn origin-top-right">
                         <div className="py-2">
                             <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 mb-2">
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">Guest User</p>
+                                <p className="text-sm font-bold text-gray-900 dark:text-white">{guestProfile?.name || 'Guest User'}</p>
                                 <p className="text-xs text-gray-500">guest@aibnb.com</p>
                             </div>
                             {[
                                 { id: 'explore', icon: Compass, label: 'Explore' },
                                 { id: 'chat', icon: Sparkles, label: 'AI Concierge' },
                                 { id: 'trips', icon: Calendar, label: 'Trips' },
-                                { id: 'messages', icon: MessageSquare, label: 'Inbox' },
-                                { id: 'wishlist', icon: Heart, label: 'Saved' }
+                                { id: 'messages', icon: MessageSquare, label: 'Inbox', badge: unreadCount },
+                                { id: 'wishlist', icon: Heart, label: 'Saved' },
+                                { id: 'profile', icon: User, label: 'Profile' }
                             ].map(item => (
                                 <button
                                     key={item.id}
                                     onClick={() => { setActiveTab(item.id as any); setIsMenuOpen(false); }}
                                     className={`w-full text-left px-6 py-3 text-sm font-medium flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${activeTab === item.id ? 'text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border-l-2 border-gray-900 dark:border-white' : 'text-gray-600 dark:text-gray-400 border-l-2 border-transparent'}`}
                                 >
-                                    <item.icon className="w-4 h-4" />
+                                    <div className="relative">
+                                        <item.icon className="w-4 h-4" />
+                                        {item.badge ? (
+                                            <div className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[9px] font-bold px-1.5 rounded-full min-w-[16px] text-center border border-white dark:border-gray-900">
+                                                {item.badge}
+                                            </div>
+                                        ) : null}
+                                    </div>
                                     {item.label}
                                 </button>
                             ))}
@@ -154,8 +188,7 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
       </div>
 
       <div className="flex-1 relative overflow-hidden flex flex-col">
-        
-        {/* EXPLORE TAB (GRID VIEW + SEARCH) */}
+        {/* EXPLORE TAB */}
         {activeTab === 'explore' && (
             <div className="flex-1 overflow-y-auto pb-32">
                 {/* Search Bar Container */}
@@ -328,7 +361,6 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                                             <Heart className="w-5 h-5 stroke-[2.5px]" />
                                         </button>
                                         
-                                        {/* Animated Guest Favorite Badge */}
                                         {(property.rating || 0) >= 4.8 && (
                                             <div className="absolute top-3 left-3 overflow-hidden rounded-full bg-white/90 dark:bg-black/80 backdrop-blur shadow-sm border border-white/20 z-10">
                                                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gold-200/50 dark:via-gold-400/20 to-transparent -translate-x-full animate-shimmer" />
@@ -364,9 +396,10 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
         )}
 
         {/* CHAT TAB (CONCIERGE) */}
-        <div className={`flex-1 flex flex-col ${activeTab === 'chat' ? 'flex' : 'hidden'}`}>
+        <div className={`flex-1 flex flex-col min-h-0 ${activeTab === 'chat' ? 'flex' : 'hidden'}`}>
              <AIChat 
                 mode="fullscreen"
+                userName={guestProfile?.name}
                 context={dynamicContext} 
                 systemInstruction={systemInstruction} 
                 properties={filteredProperties} 
@@ -386,7 +419,7 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
         {/* MESSAGES TAB */}
         {activeTab === 'messages' && (
              <div className="flex-1 overflow-hidden p-6">
-                 <Messages />
+                 <Messages currentUserId={guestProfile?.id} userRole={UserRole.GUEST} />
              </div>
         )}
 
@@ -404,6 +437,18 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                  >
                     Start Exploring
                  </button>
+             </div>
+        )}
+
+        {/* PROFILE TAB */}
+        {activeTab === 'profile' && guestProfile && (
+             <div className="flex-1 overflow-y-auto">
+                 <HostProfilePage 
+                    profile={guestProfile} 
+                    isEditable={true} 
+                    onSave={(p) => onUpdateProfile && onUpdateProfile(p)}
+                    currentUserId={guestProfile.id}
+                 />
              </div>
         )}
       </div>
@@ -486,7 +531,6 @@ const TripsView = () => {
                 </div>
             )}
             
-            {/* UNIVERSAL BOOKING MODAL */}
             {selectedBooking && (
                 <BookingDetailsModal 
                     booking={selectedBooking} 
