@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Conversation, Message, UserRole } from '../types';
 import { subscribeToConversations, subscribeToMessages, sendMessage, markConversationAsRead } from '../services/chatService';
@@ -45,21 +46,23 @@ export const Messages: React.FC<MessagesProps> = ({ currentUserId = 'guest_user_
     // Subscribe to Active Conversation Messages
     useEffect(() => {
         if (!activeConvId) return;
+        
+        // Initial mark as read when opening
+        markConversationAsRead(activeConvId, userRole);
 
         const unsubscribe = subscribeToMessages(activeConvId, (data) => {
             setMessages(data);
             
-            // Real-time Read Receipts: 
-            // If we receive unread messages from the other person while looking at the chat, mark them as read immediately.
-            const hasUnread = data.some(m => m.senderRole !== userRole && m.status !== 'read');
+            // Real-time: If we are viewing the chat and new unread messages arrive from others, mark them read
+            const hasUnread = data.some(m => m.senderId !== currentUserId && m.status !== 'read');
             if (hasUnread) {
-                 markConversationAsRead(activeConvId, userRole);
+                markConversationAsRead(activeConvId, userRole);
             }
 
             setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
         });
         return () => unsubscribe();
-    }, [activeConvId, userRole]);
+    }, [activeConvId, userRole, currentUserId]);
 
     const activeConversation = conversations.find(c => c.id === activeConvId);
 
@@ -245,18 +248,14 @@ export const Messages: React.FC<MessagesProps> = ({ currentUserId = 'guest_user_
                                     }`}>
                                         {msg.text}
                                     </div>
-                                    <div className="flex items-center gap-1 mt-1 px-1">
-                                        <span className="text-[10px] text-gray-400">{msg.timestamp}</span>
+                                    <span className="text-[10px] text-gray-400 mt-1 px-1 flex items-center gap-1">
+                                        {msg.timestamp}
                                         {msg.senderId === currentUserId && (
-                                            <>
-                                                {msg.status === 'read' ? (
-                                                    <CheckCheck className="w-3 h-3 text-blue-500" />
-                                                ) : (
-                                                    <Check className="w-3 h-3 text-gray-400" />
-                                                )}
-                                            </>
+                                            msg.status === 'read' 
+                                            ? <CheckCheck className="w-3 h-3 text-blue-500" />
+                                            : <Check className="w-3 h-3 text-gray-400" />
                                         )}
-                                    </div>
+                                    </span>
                                 </div>
                             </div>
                         ))}

@@ -206,28 +206,39 @@ export const sendMessage = async (
 export const markConversationAsRead = async (conversationId: string, userRole: UserRole) => {
     try {
         const batch = writeBatch(db);
-
-        // 1. Reset Conversation Unread Count
         const field = userRole === UserRole.HOST ? 'hostUnreadCount' : 'guestUnreadCount';
         const convRef = doc(db, CONV_COLLECTION, conversationId);
-        batch.update(convRef, { [field]: 0 });
+        
+        // 1. Reset Conversation Unread Counter
+        batch.update(convRef, {
+            [field]: 0
+        });
 
-        // 2. Mark Messages as Read
-        // We look for messages sent by the OTHER person that are not yet read.
-        // Assuming 'sent' is the only non-read status for now.
+        // 2. Mark individual messages as 'read'
+        // We want to update messages sent by the OTHER person (not me) that are not yet read.
+        // Assuming userRole is the READER's role.
         const otherRole = userRole === UserRole.HOST ? UserRole.GUEST : UserRole.HOST;
         
         const messagesRef = collection(db, CONV_COLLECTION, conversationId, 'messages');
+        
+        // OPTIMIZATION: Use client-side filtering for status to avoid needing a composite index
+        // for (senderRole == 'X' && status != 'read'). 
+        // Queries with inequality filters (!=) combined with other filters require explicit indexes in Firestore.
         const q = query(
             messagesRef, 
-            where('senderRole', '==', otherRole),
-            where('status', '==', 'sent')
+            where('senderRole', '==', otherRole)
         );
         
         const snapshot = await getDocs(q);
-        snapshot.docs.forEach(doc => {
-            batch.update(doc.ref, { status: 'read' });
-        });
+        
+        if (!snapshot.empty) {
+            snapshot.docs.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.status !== 'read') {
+                    batch.update(docSnap.ref, { status: 'read' });
+                }
+            });
+        }
 
         await batch.commit();
     } catch (e) {
