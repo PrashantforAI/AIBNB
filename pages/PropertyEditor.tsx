@@ -1,11 +1,12 @@
 
 import React, { useState, useRef } from 'react';
 import { Property, PropertyType, MealPlan } from '../types';
-import { generateDescription, suggestPricing } from '../services/aiService';
+import { callAICore } from '../services/api';
+import { suggestPricing } from '../services/aiService';
 import { 
   Wand2, Save, Plus, Trash2, IndianRupee, MapPin, 
   Home, Users, Clock, Camera, ChevronRight, ChevronLeft, Check,
-  Utensils, BedDouble, Bath, Car, Dog, Wifi, UserCheck, Droplets, Shield, FileText, Sparkles, Coffee, PartyPopper, Briefcase, Heart, Palmtree, ChefHat
+  Utensils, BedDouble, Bath, Car, Dog, Wifi, UserCheck, Droplets, Shield, FileText, Sparkles, Coffee, PartyPopper, Briefcase, Heart, Palmtree, ChefHat, Loader2
 } from 'lucide-react';
 import { AMENITIES_LIST } from '../constants';
 import { LocationPicker } from '../components/LocationPicker';
@@ -212,15 +213,36 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
       }
   };
 
+  // --- CONNECTED TO BACKEND CLOUD FUNCTION ---
   const handleAiDescription = async () => {
-      if (!formData.city || !formData.type) {
-          alert("Please fill in basic details first.");
+      if (!formData.title || !formData.city) {
+          alert("Please fill in the Property Name and City first.");
           return;
       }
       setIsGenerating(true);
-      const desc = await generateDescription(formData, propertyVibe);
-      handleChange('description', desc);
-      setIsGenerating(false);
+      
+      try {
+          const response = await callAICore('generate_description', {
+              title: formData.title,
+              location: `${formData.location}, ${formData.city}`,
+              type: formData.type,
+              amenities: formData.amenities,
+              bedrooms: formData.bedrooms,
+              pool: formData.poolType !== 'NA',
+              vibe: propertyVibe
+          }, 'host', 'host1');
+
+          if (response.data && response.data.description) {
+              handleChange('description', response.data.description);
+          } else {
+              throw new Error(response.error || 'No description returned');
+          }
+      } catch (error) {
+          console.error("AI Description Error:", error);
+          alert("Could not generate description. Please try again.");
+      } finally {
+          setIsGenerating(false);
+      }
   };
 
   const handleAiPricing = async () => {
@@ -527,7 +549,20 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
                      <div className="pt-6">
                         <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-800">
                             <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-4"><Sparkles className="w-5 h-5 text-indigo-500" /> AI Writer</h3>
-                            <button onClick={handleAiDescription} disabled={isGenerating} className="w-full py-3 bg-white dark:bg-indigo-900 text-indigo-600 dark:text-indigo-200 rounded-xl font-bold shadow-sm hover:shadow-md border border-indigo-200 dark:border-indigo-700 transition-all flex items-center justify-center gap-2">
+                            
+                            <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
+                                {VIBES.map((v) => (
+                                    <button
+                                        key={v.id}
+                                        onClick={() => setPropertyVibe(v.id)}
+                                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${propertyVibe === v.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-white dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700'}`}
+                                    >
+                                        <v.icon className="w-3 h-3" /> {v.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <button onClick={handleAiDescription} disabled={isGenerating} className="w-full py-3 bg-white dark:bg-indigo-900 text-indigo-600 dark:text-indigo-200 rounded-xl font-bold shadow-sm hover:shadow-md border border-indigo-200 dark:border-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-70">
                                 {isGenerating ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent"></div> : <Wand2 className="w-4 h-4" />} Generate Optimized Description
                             </button>
                         </div>

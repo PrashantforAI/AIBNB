@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { HostDashboard } from './pages/HostDashboard';
@@ -19,6 +20,7 @@ import { fetchUserProfile, saveUserProfile } from './services/userService';
 import { Loader2, AlertTriangle, User, ShieldCheck, Sun, Moon, Briefcase } from 'lucide-react';
 import { signInAnonymously } from 'firebase/auth';
 import { auth } from './firebaseConfig';
+import { callAICore } from './services/api';
 
 function App() {
   const [activePage, setActivePage] = useState('dashboard');
@@ -202,13 +204,57 @@ function App() {
   const handleAddNew = () => { setEditingProperty(undefined); setIsEditorOpen(true); };
   
   const handleSaveProperty = async (prop: Property) => {
-    const newId = prop.id || Date.now().toString();
-    const pToSave = { ...prop, id: newId };
-    if (editingProperty) setProperties(prev => prev.map(p => p.id === newId ? pToSave : p));
-    else setProperties(prev => [...prev, pToSave]);
-    setIsEditorOpen(false);
-    setActivePage('listings');
-    try { await savePropertyToDb(pToSave); } catch (e) {}
+    // If it's a NEW property (status draft or no ID yet, though ID might be set by frontend logic earlier)
+    // The backend add_property creates a new doc.
+    // Ideally we strictly separate "create" via backend and "update" via frontend or backend.
+    // For this task, I'll route "create" through the new backend function.
+    
+    // Check if it's effectively a new property being published
+    const isNew = !properties.find(p => p.id === prop.id); // Simple check
+
+    if (isNew) {
+        try {
+            setIsLoading(true);
+            // Map to backend schema
+            const payload = {
+                title: prop.title,
+                description: prop.description,
+                location: {
+                    address: prop.address,
+                    city: prop.city,
+                    country: prop.country,
+                    lat: prop.gpsLocation?.lat,
+                    lng: prop.gpsLocation?.lng
+                },
+                pricePerNight: prop.baseWeekdayPrice,
+                maxGuests: prop.maxGuests,
+                amenities: prop.amenities
+            };
+
+            await callAICore('add_property', payload, 'host', currentUserId);
+            
+            // Refresh local list
+            await refreshProperties();
+            setIsEditorOpen(false);
+            setActivePage('listings');
+        } catch (e) {
+            console.error("Failed to add property via backend", e);
+            alert("Backend Error: Could not list property.");
+        } finally {
+            setIsLoading(false);
+        }
+    } else {
+        // Update existing logic (keep as is or move to backend too? Prompt asked for "List a New Property" form specifically)
+        // I'll keep update logic local for now to minimize disruption, as requested specifically for "List a New Property"
+        const newId = prop.id || Date.now().toString();
+        const pToSave = { ...prop, id: newId };
+        if (editingProperty) setProperties(prev => prev.map(p => p.id === newId ? pToSave : p));
+        else setProperties(prev => [...prev, pToSave]); // Fallback if backend fails/skipped
+        
+        try { await savePropertyToDb(pToSave); } catch (e) {}
+        setIsEditorOpen(false);
+        setActivePage('listings');
+    }
   };
 
   const handleUpdateProperty = async (p: Property) => {
