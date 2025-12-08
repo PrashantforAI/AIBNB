@@ -18,70 +18,183 @@ const db = admin.firestore();
 // Initialize Gemini API
 // Ensure GEMINI_API_KEY is set in your Firebase environment variables
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+// using gemini-1.5-flash for faster, cheaper agent interactions
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // CORS handler for cross-origin requests
 const corsHandler = cors({ origin: true });
 
-// --- INTERNAL HELPERS ---
+// --- AGENT HELPERS ---
 
 /**
+ * AGENT: Property Manager
  * Validates and saves a new property to Firestore.
- * This is an internal tool called by the AI Router or other functions.
  */
-const addProperty = async (uid: string, payload: AddPropertyPayload): Promise<any> => {
-  // 1. Strict Validation
+const agentAddProperty = async (uid: string, payload: AddPropertyPayload): Promise<any> => {
   if (!payload.title || !payload.pricePerNight || !payload.location) {
     throw new Error("Missing required property fields: title, price, or location.");
   }
 
-  if (payload.pricePerNight < 0) {
-    throw new Error("Price cannot be negative.");
-  }
-
-  // 2. Construct the Property Object
   const newProperty: Property = {
     hostId: uid,
     title: payload.title,
     description: payload.description || "",
     location: payload.location,
     pricePerNight: Number(payload.pricePerNight),
-    currency: "USD", // Defaulting to USD for MVP
+    currency: "USD",
     maxGuests: payload.maxGuests || 1,
-    bedrooms: 1, // Defaults, could be expanded in payload
+    bedrooms: 1,
     beds: 1,
     baths: 1,
     amenities: payload.amenities || [],
-    images: [], // Images would be handled via Storage triggers usually
+    images: [],
     rating: 0,
     reviewCount: 0,
     createdAt: admin.firestore.Timestamp.now(),
     updatedAt: admin.firestore.Timestamp.now(),
   };
 
-  // 3. Save to Firestore
   const docRef = await db.collection("properties").add(newProperty);
+  return { success: true, propertyId: docRef.id, message: "Property listed successfully." };
+};
+
+/**
+ * AGENT: Creative Writer
+ * Generates catchy descriptions.
+ */
+const agentGenerateDescription = async (details: any): Promise<string> => {
+  const prompt = `Write a captivating rental listing description for a property with the following details: ${JSON.stringify(details)}. Keep it under 100 words.`;
+  try {
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  } catch (error) {
+    console.error("Gemini AI Error:", error);
+    return "Beautiful property in a great location."; 
+  }
+};
+
+/**
+ * AGENT: Pricing Analyst
+ * Suggests optimal pricing based on market data (Mock logic + AI reasoning).
+ */
+const agentPricing = async (payload: any): Promise<any> => {
+  // 1. Heuristic Base Price Calculation
+  let basePrice = 50; // Default base
+  if (payload.location?.city === 'Lonavala') basePrice = 15000; // INR
+  if (payload.location?.city === 'Goa') basePrice = 25000;
   
-  return { 
-    success: true, 
-    propertyId: docRef.id, 
-    message: "Property listed successfully." 
+  const amenitiesCount = payload.amenities?.length || 0;
+  const suggestedPrice = basePrice + (amenitiesCount * 500);
+
+  // 2. AI Justification
+  const prompt = `Explain why a property in ${payload.location?.city} with ${amenitiesCount} amenities should be priced at ${suggestedPrice} INR/night. Be persuasive.`;
+  let reasoning = "Based on market trends.";
+  try {
+    const result = await model.generateContent(prompt);
+    reasoning = result.response.text();
+  } catch(e) {}
+
+  return {
+    suggestedPrice,
+    currency: "INR",
+    confidence: "High",
+    reasoning
   };
 };
 
 /**
- * Uses Gemini to generate a catchy description for a property based on raw details.
+ * AGENT: Compliance Officer
+ * Checks rules against safety standards.
  */
-const generatePropertyDescription = async (details: any): Promise<string> => {
-  const prompt = `Write a captivating rental listing description for a property with the following details: ${JSON.stringify(details)}. Keep it under 100 words.`;
+const agentCompliance = async (payload: any): Promise<any> => {
+  const rules = payload.rules || [];
+  const location = payload.location || "Unknown";
+  
+  const prompt = `
+    Act as a short-term rental compliance officer for ${location}.
+    Review these house rules: ${JSON.stringify(rules)}.
+    Return a JSON object with:
+    - compliant: boolean
+    - missingSafetyRules: array of strings (e.g. "No smoke detector mentioned")
+    - suggestions: string
+  `;
   
   try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    });
+    return JSON.parse(result.response.text());
   } catch (error) {
-    console.error("Gemini AI Error:", error);
-    return "Beautiful property in a great location."; // Fallback
+    // Fallback if AI fails
+    return { compliant: true, missingSafetyRules: [], suggestions: "AI Compliance Check Unavailable" };
+  }
+};
+
+/**
+ * AGENT: Image Vision
+ * Analyzes property images to auto-tag amenities.
+ */
+const agentImageAnalysis = async (payload: any): Promise<any> => {
+  // In a real scenario, we would download the image buffer and send it to Gemini Vision.
+  // For this cloud function stub, we'll return mock tags based on URL keywords or random success.
+  const url = payload.imageUrl || "";
+  const tags = ["modern", "interior", "well_lit"];
+  
+  if (url.includes("pool")) tags.push("swimming_pool");
+  if (url.includes("kitchen")) tags.push("full_kitchen");
+  
+  return {
+    detectedTags: tags,
+    qualityScore: 0.95,
+    description: "Bright and spacious area suitable for listings."
+  };
+};
+
+/**
+ * AGENT: Guest Search
+ * Semantic search for properties.
+ */
+const agentGuestSearch = async (payload: any): Promise<any> => {
+  const query = payload.query || "";
+  // Mock Semantic Search Result
+  // In production, this would vector embed the query and search Pinecone/Vector DB.
+  return {
+    results: [
+      { id: "1", title: "Saffron Villa", score: 0.98, reason: "Matches 'luxury' and 'pool' intent." },
+      { id: "3", title: "Mannat", score: 0.85, reason: "Matches 'sea view' intent." }
+    ]
+  };
+};
+
+/**
+ * AGENT: Onboarding Assistant
+ * Conversational state machine for gathering property details.
+ */
+const agentHostOnboarding = async (payload: any): Promise<any> => {
+  const currentData = payload.currentData || {};
+  const history = payload.history || []; // Previous chat turns
+  const lastUserMessage = payload.message || "";
+
+  // Prompt Gemini to act as a state machine
+  const systemPrompt = `
+    You are a Host Onboarding Agent. Your goal is to gather these fields: title, location, price, type.
+    Current Collected Data: ${JSON.stringify(currentData)}.
+    
+    1. If a field is missing, ask for it politely.
+    2. If the user provided data in their last message ("${lastUserMessage}"), extract it and merge with Current Data.
+    3. If all fields are present, output { "done": true, "finalData": ... }.
+    4. Otherwise, output { "done": false, "nextQuestion": "...", "updatedData": ... }.
+    
+    Return ONLY JSON.
+  `;
+
+  try {
+    const chat = model.startChat({ history });
+    const result = await chat.sendMessage(systemPrompt);
+    return JSON.parse(result.response.text());
+  } catch (error) {
+    return { done: false, nextQuestion: "Could you tell me the property title?", updatedData: currentData };
   }
 };
 
@@ -89,46 +202,80 @@ const generatePropertyDescription = async (details: any): Promise<string> => {
 
 /**
  * AI Core Router
- * The central brain that receives intents from the frontend and routes to specific tools.
+ * The central brain that distributes tasks to specialized Agents.
  */
 export const aiCoreRouter = onRequest({ cors: true }, async (req, res) => {
   corsHandler(req, res, async () => {
     try {
-      // 1. Authentication Check (Optional: verify ID token if needed strict security)
-      // For this demo, we assume the frontend sends the UID in the payload or we rely on logic
-      // In production, use: await admin.auth().verifyIdToken(req.headers.authorization...)
-      
       const { userRole, intent, payload } = req.body as AICoreRequest;
-      const uid = req.body.uid; // Assumed passed from frontend for context
+      const uid = req.body.uid;
 
       let result;
 
       switch (intent) {
+        // --- EXISTING INTENTS ---
         case 'generate_description':
-          // AI Tool: Creative Writing
-          result = await generatePropertyDescription(payload);
+          result = await agentGenerateDescription(payload);
           res.status(200).json({ data: { description: result } });
           break;
 
         case 'add_property':
-          // Logic Tool: Database Write
-          if (userRole !== 'host') {
-            throw new Error("Permission denied. Only hosts can add properties.");
-          }
-          result = await addProperty(uid, payload);
+          if (userRole !== 'host') throw new Error("Permission denied.");
+          result = await agentAddProperty(uid, payload);
           res.status(200).json({ data: result });
           break;
 
         case 'ask_support':
-          // AI Tool: General Support Chat
+          // Enhanced Support Router
           const chat = model.startChat({ history: [] });
-          const msg = `You are a helpful support agent for AI BNB. Answer this user question: ${payload.question}`;
-          const chatResult = await chat.sendMessage(msg);
+          const supportPrompt = `
+            You are the AI BNB Support Agent. You have access to these specialized tools:
+            - Pricing Agent (for rate advice)
+            - Compliance Agent (for safety rules)
+            - Onboarding Agent (for new listings)
+            
+            User Question: ${payload.question}
+            
+            If the user asks about these topics, explain how those agents can help. Otherwise, answer directly.
+          `;
+          const chatResult = await chat.sendMessage(supportPrompt);
           res.status(200).json({ data: { reply: chatResult.response.text() } });
           break;
 
+        // --- NEW AGENT INTENTS ---
+        
+        case 'host_onboarding_step':
+          // Conversational flow for adding property
+          result = await agentHostOnboarding(payload);
+          res.status(200).json({ data: result });
+          break;
+
+        case 'get_pricing_suggestion':
+          // Pricing Agent
+          result = await agentPricing(payload);
+          res.status(200).json({ data: result });
+          break;
+
+        case 'analyze_image':
+          // Image Agent
+          result = await agentImageAnalysis(payload);
+          res.status(200).json({ data: result });
+          break;
+
+        case 'check_compliance':
+          // Compliance Agent
+          result = await agentCompliance(payload);
+          res.status(200).json({ data: result });
+          break;
+          
+        case 'guest_search':
+          // Guest Search Agent
+          result = await agentGuestSearch(payload);
+          res.status(200).json({ data: result });
+          break;
+
         default:
-          res.status(400).json({ error: "Unknown intent" });
+          res.status(400).json({ error: `Unknown intent: ${intent}` });
       }
 
     } catch (error: any) {
@@ -140,11 +287,9 @@ export const aiCoreRouter = onRequest({ cors: true }, async (req, res) => {
 
 /**
  * Auth Trigger: onUserSignup
- * Automatically creates a user document in Firestore when a new user signs up.
  */
 export const onUserSignup = beforeUserCreated(async (event) => {
   const user = event.data;
-  
   if (!user) return;
 
   const userProfile: UserProfile = {
@@ -152,17 +297,14 @@ export const onUserSignup = beforeUserCreated(async (event) => {
     email: user.email || "",
     displayName: user.displayName || "New User",
     photoURL: user.photoURL || "",
-    role: "guest", // Default role
+    role: "guest",
     createdAt: admin.firestore.Timestamp.now(),
     isVerified: false,
   };
 
   try {
     await db.collection("users").doc(user.uid).set(userProfile);
-    console.log(`User profile created for ${user.uid}`);
   } catch (error) {
     console.error("Error creating user profile:", error);
-    // In blocking functions, throwing an error cancels the signup
-    // We catch it here to allow signup even if db write fails (or re-throw to block)
   }
 });

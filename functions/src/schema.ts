@@ -54,6 +54,15 @@ export interface AddPropertyPayload {
 // Expected structure for AI Router requests
 export interface AICoreRequest {
   userRole: UserRole;
-  intent: 'generate_description' | 'add_property' | 'ask_support';
+  intent: 
+    | 'generate_description' 
+    | 'add_property' 
+    | 'ask_support' 
+    | 'host_onboarding_step' 
+    | 'get_pricing_suggestion' 
+    | 'analyze_image' 
+    | 'check_compliance' 
+    | 'guest_search';
   payload: any;
+  uid?: string;
 }
