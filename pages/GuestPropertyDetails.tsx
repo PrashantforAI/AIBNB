@@ -3,9 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { Property, DaySettings } from '../types';
 import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2, Dog, Clock, Ban, Calendar as CalendarIcon, X, Sparkles, MessageSquare } from 'lucide-react';
 import { AMENITIES_LIST } from '../constants';
-import { createBooking, getUnavailableDates } from '../services/bookingService';
+import { createBooking, getUnavailableDates, getDatesInRange } from '../services/bookingService';
 import { startConversation } from '../services/chatService';
 import { CalendarPopup } from '../components/CalendarPopup';
+import { LocationPicker } from '../components/LocationPicker';
 
 interface GuestPropertyDetailsProps {
   property: Property;
@@ -31,16 +32,21 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
 
   const unavailableDates = getUnavailableDates(property);
 
+  // Helper used for pricing calculation (NIGHTS)
   const getDaysArray = (start: string, end: string) => {
-    const arr = [];
-    if (!start || !end) return arr;
-    const dt = new Date(start);
-    const endDt = new Date(end);
-    while (dt < endDt) { 
-        arr.push(new Date(dt));
-        dt.setDate(dt.getDate() + 1);
-    }
-    return arr;
+    return getDatesInRange(start, end).map(d => new Date(d));
+  };
+
+  const validateDateRange = (start: string, end: string) => {
+      // Validate that the NIGHTS are available.
+      // E.g., Booking 22-24 means 22 and 23 must be available. 24 can be booked by someone else.
+      const nights = getDatesInRange(start, end);
+      for (const dateStr of nights) {
+          if (unavailableDates.has(dateStr)) {
+              return false;
+          }
+      }
+      return true;
   };
 
   const dates = getDaysArray(checkIn, checkOut);
@@ -56,14 +62,12 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
 
   const initiateBooking = () => {
     if (!checkIn || !checkOut || totalNights < 1) return;
-    const requestedDates = getDaysArray(checkIn, checkOut);
-    for (const d of requestedDates) {
-        const dStr = d.toISOString().split('T')[0];
-        if (unavailableDates.has(dStr)) {
-            alert(`The date ${dStr} is no longer available.`);
-            return;
-        }
+    
+    if (!validateDateRange(checkIn, checkOut)) {
+        alert("The selected date range includes dates that are already booked or blocked. Please select a valid range.");
+        return;
     }
+
     setShowConfirmation(true);
   };
 
@@ -174,7 +178,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
         <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-6">
             <span className="flex items-center gap-1 font-bold text-gray-900 dark:text-white"><Star className="w-3.5 h-3.5 fill-current text-gold-500"/> {property.rating || 'New'}</span>
             <span className="hidden sm:inline">·</span>
-            <span className="underline decoration-gray-300 cursor-pointer hover:text-gray-900 dark:hover:text-white">12 reviews</span>
+            <span className="underline decoration-gray-300 cursor-pointer hover:text-gray-900 dark:text-white">12 reviews</span>
             <span className="hidden sm:inline">·</span>
             <span className="flex items-center gap-1 text-gray-900 dark:text-white font-medium">{property.city}, {property.state}</span>
         </div>
@@ -244,7 +248,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                     </div>
                 </div>
                 
-                <div className="pb-6">
+                <div className="pb-6 border-b border-gray-100 dark:border-gray-800">
                     <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-6">Things to know</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-gray-50 dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
                         <div>
@@ -268,6 +272,23 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                         </div>
                     </div>
                 </div>
+
+                {/* Map Location Section */}
+                <div className="pb-6">
+                    <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-6">Where you'll be</h3>
+                    <div className="h-[400px] rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 z-0">
+                         <LocationPicker 
+                            lat={property.gpsLocation?.lat || 20.5937} 
+                            lng={property.gpsLocation?.lng || 78.9629} 
+                            onChange={() => {}} 
+                            readOnly={true}
+                            className="w-full h-full"
+                         />
+                    </div>
+                    <p className="mt-4 text-gray-600 dark:text-gray-400 text-sm">
+                        {property.location}, {property.city}, {property.state}, {property.pincode}
+                    </p>
+                </div>
             </div>
 
             {/* Sticky Sidebar */}
@@ -289,40 +310,49 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                                 className={`p-3 rounded-xl border cursor-pointer transition-all relative ${activePicker === 'checkIn' ? 'border-black dark:border-white ring-1 ring-black dark:ring-white bg-gray-50 dark:bg-gray-700 z-30' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 z-20'}`}
                                 onClick={(e) => { e.stopPropagation(); setActivePicker('checkIn'); }}
                             >
-                                <label className="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 block mb-0.5">Check-in</label>
-                                <div className={`text-sm font-bold truncate ${checkIn ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>{checkIn || 'Select Date'}</div>
-                                {activePicker === 'checkIn' && (
-                                    <CalendarPopup 
-                                        selectedDate={checkIn}
-                                        startDate={checkIn}
-                                        endDate={checkOut}
-                                        minDate={today}
-                                        unavailableDates={unavailableDates}
-                                        onSelect={(d) => { setCheckIn(d); if(!checkOut) setActivePicker('checkOut'); else setActivePicker(null); }}
-                                        onClose={() => setActivePicker(null)}
-                                        className="-left-2 top-[110%]"
-                                    />
-                                )}
+                                <div className="flex justify-between items-center w-full">
+                                    <div className="flex-1 overflow-hidden">
+                                        <label className="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 block mb-0.5">Check-in</label>
+                                        <div className={`text-sm font-bold truncate ${checkIn ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>{checkIn || 'Select Date'}</div>
+                                    </div>
+                                    {checkIn && (
+                                        <button 
+                                            onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                setCheckIn(''); 
+                                                setCheckOut(''); 
+                                            }}
+                                            className="ml-2 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 transition-colors z-40"
+                                            title="Clear date"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             <div 
                                 className={`p-3 rounded-xl border cursor-pointer transition-all relative ${activePicker === 'checkOut' ? 'border-black dark:border-white ring-1 ring-black dark:ring-white bg-gray-50 dark:bg-gray-700 z-30' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 z-20'}`}
                                 onClick={(e) => { e.stopPropagation(); setActivePicker('checkOut'); }}
                             >
-                                <label className="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 block mb-0.5">Check-out</label>
-                                <div className={`text-sm font-bold truncate ${checkOut ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>{checkOut || 'Select Date'}</div>
-                                {activePicker === 'checkOut' && (
-                                    <CalendarPopup 
-                                        selectedDate={checkOut}
-                                        startDate={checkIn}
-                                        endDate={checkOut}
-                                        minDate={checkIn || today}
-                                        unavailableDates={unavailableDates}
-                                        onSelect={(d) => { setCheckOut(d); setActivePicker(null); }}
-                                        onClose={() => setActivePicker(null)}
-                                        className="right-0 top-[110%]"
-                                    />
-                                )}
+                                <div className="flex justify-between items-center w-full">
+                                    <div className="flex-1 overflow-hidden">
+                                        <label className="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 block mb-0.5">Check-out</label>
+                                        <div className={`text-sm font-bold truncate ${checkOut ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>{checkOut || 'Select Date'}</div>
+                                    </div>
+                                    {checkOut && (
+                                        <button 
+                                            onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                setCheckOut(''); 
+                                            }}
+                                            className="ml-2 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 transition-colors z-40"
+                                            title="Clear date"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         
@@ -339,6 +369,49 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                                     <button onClick={() => setGuests(Math.min(property.maxGuests, guests+1))} className="w-8 h-8 rounded-full border border-gray-200 dark:border-gray-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-white disabled:opacity-50" disabled={guests >= property.maxGuests}>+</button>
                                 </div>
                         </div>
+
+                        {/* UNIFIED CALENDAR POPUP */}
+                        {(activePicker === 'checkIn' || activePicker === 'checkOut') && (
+                            <div className="absolute top-[calc(100%+8px)] right-0 z-50 shadow-2xl rounded-2xl w-full sm:min-w-[340px]">
+                                <CalendarPopup 
+                                    selectedDate={activePicker === 'checkIn' ? checkIn : checkOut}
+                                    startDate={checkIn}
+                                    endDate={checkOut}
+                                    minDate={today}
+                                    unavailableDates={unavailableDates}
+                                    onSelect={(d) => { 
+                                        if (activePicker === 'checkIn') {
+                                            // Reset checkout if new checkin is after it
+                                            if (checkOut && d > checkOut) {
+                                                setCheckIn(d);
+                                                setCheckOut('');
+                                                setActivePicker('checkOut');
+                                                return;
+                                            }
+                                            
+                                            // Validate range if checkout exists (Check inclusive/exclusive logic)
+                                            if (checkOut && !validateDateRange(d, checkOut)) {
+                                                alert("The selected range includes blocked dates. Please select valid dates.");
+                                                return;
+                                            }
+                                            
+                                            setCheckIn(d); 
+                                            if(!checkOut) setActivePicker('checkOut'); 
+                                            else setActivePicker(null); 
+                                        } else {
+                                            if (!validateDateRange(checkIn, d)) {
+                                                alert("The selected range includes blocked dates. Please select valid dates.");
+                                                return;
+                                            }
+                                            setCheckOut(d); 
+                                            setActivePicker(null); 
+                                        }
+                                    }}
+                                    onClose={() => setActivePicker(null)}
+                                    className="!static !w-full !shadow-none !border-none" 
+                                />
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex gap-2">
@@ -411,9 +484,24 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                         unavailableDates={unavailableDates}
                         onSelect={(d) => {
                             if (activePicker === 'checkIn') {
+                                // Reset checkout if new checkin is after it
+                                if (checkOut && d > checkOut) {
+                                    setCheckIn(d);
+                                    setCheckOut('');
+                                    setActivePicker('checkOut');
+                                    return;
+                                }
+                                if (checkOut && !validateDateRange(d, checkOut)) {
+                                    alert("The selected range includes blocked dates.");
+                                    return;
+                                }
                                 setCheckIn(d);
                                 setActivePicker('checkOut');
                             } else {
+                                if (!validateDateRange(checkIn, d)) {
+                                    alert("The selected range includes blocked dates.");
+                                    return;
+                                }
                                 setCheckOut(d);
                                 setActivePicker(null);
                             }

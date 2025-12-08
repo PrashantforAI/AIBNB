@@ -28,7 +28,6 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({
     const [editMode, setEditMode] = useState(false);
     const [formData, setFormData] = useState<HostProfile>(profile);
     
-    // Messaging State
     const [messageModalOpen, setMessageModalOpen] = useState(false);
     const [messageText, setMessageText] = useState('');
     const [moderationStatus, setModerationStatus] = useState<'idle' | 'checking' | 'safe' | 'unsafe'>('idle');
@@ -43,13 +42,11 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({
         if (!messageText.trim()) return;
         setModerationStatus('checking');
         
-        // 1. Moderate
         const result = await moderateMessage(messageText);
         
         if (result.safe) {
             setModerationStatus('safe');
             try {
-                // 2. Start Conversation / Send Message via Service
                 const convId = await startConversation(
                     profile.id, 
                     currentUserId, 
@@ -57,7 +54,7 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({
                     currentUserAvatar || '', 
                     profile.name, 
                     profile.avatar,
-                    'General Inquiry' // Default to General if no property context known
+                    'General Inquiry'
                 );
                 await sendMessage(convId, currentUserId, UserRole.GUEST, messageText);
 
@@ -78,7 +75,7 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({
 
     if (isEditable && editMode) {
         return (
-            <div className="max-w-2xl mx-auto p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 animate-fadeIn">
+            <div className="max-w-2xl mx-auto p-4 md:p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 animate-fadeIn">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Edit Profile</h2>
                     <button onClick={() => setEditMode(false)} className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Cancel</button>
@@ -132,7 +129,7 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-4 md:p-8 animate-fadeIn relative">
+        <div className="max-w-4xl mx-auto p-4 md:p-8 animate-fadeIn relative pb-24">
             {onBack && (
                 <button onClick={onBack} className="mb-6 flex items-center gap-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
                     <ChevronLeft className="w-5 h-5" /> Back
@@ -140,7 +137,6 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-                {/* Left Column: Card */}
                 <div className="md:col-span-1">
                     <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-xl overflow-hidden sticky top-24">
                         <div className="p-8 flex flex-col items-center text-center">
@@ -182,7 +178,6 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({
                     </div>
                 </div>
 
-                {/* Right Column: Bio & Details */}
                 <div className="md:col-span-2 space-y-8">
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">About {profile.name}</h2>
@@ -226,7 +221,6 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({
                 </div>
             </div>
 
-            {/* MESSAGE MODAL */}
             {messageModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
                     <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800 transform transition-all scale-100">
@@ -252,7 +246,6 @@ export const HostProfilePage: React.FC<HostProfileProps> = ({
                                 onChange={(e) => { setMessageText(e.target.value); setModerationStatus('idle'); }}
                             />
 
-                            {/* FEEDBACK STATUS */}
                             {moderationStatus === 'unsafe' && (
                                 <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900 rounded-xl flex items-start gap-3">
                                     <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />

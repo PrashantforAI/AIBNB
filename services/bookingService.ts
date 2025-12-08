@@ -3,6 +3,7 @@ import { db } from '../firebaseConfig';
 import { collection, addDoc, doc, getDoc, updateDoc, query, getDocs, where, orderBy } from 'firebase/firestore';
 import { Booking, Property, DaySettings } from '../types';
 import { startConversation, updateConversationBooking } from './chatService';
+import { sanitizeForFirestore } from './propertyService';
 
 const BOOKING_COLLECTION = 'bookings';
 const PROPERTY_COLLECTION = 'properties';
@@ -13,6 +14,8 @@ export const getDatesInRange = (startDate: string, endDate: string) => {
     const dt = new Date(startDate); 
     const end = new Date(endDate);
     
+    // Iterate until BEFORE end date (Nights logic)
+    // If you book 22 to 24, you occupy night of 22 and 23. You leave morning of 24.
     while (dt < end) {
         dates.push(new Date(dt).toISOString().split('T')[0]);
         dt.setDate(dt.getDate() + 1);
@@ -23,12 +26,15 @@ export const getDatesInRange = (startDate: string, endDate: string) => {
 // --- CENTRALIZED AVAILABILITY LOGIC ---
 export const isDateRangeAvailable = (property: Property, startDate: string, endDate: string): boolean => {
     if (!startDate || !endDate) return true; 
-    const requestedDates = getDatesInRange(startDate, endDate);
+    
+    // We check availability for the NIGHTS of the stay.
+    // [Start, End) -> Start Inclusive, End Exclusive.
+    const requestedNights = getDatesInRange(startDate, endDate);
     const calendar = property.calendar || {};
 
-    for (const dateStr of requestedDates) {
+    for (const dateStr of requestedNights) {
         const daySettings = calendar[dateStr];
-        // If status is booked (Confirmed) OR blocked OR (booked + pending request), it's unavailable.
+        // If a night is booked or blocked, the range is unavailable
         if (daySettings && (daySettings.status === 'booked' || daySettings.status === 'blocked')) {
             return false;
         }
@@ -68,7 +74,7 @@ export const getBookingById = async (bookingId: string): Promise<Booking | null>
 
 export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status' | 'bookingCode' | 'paymentStatus' | 'createdAt'>): Promise<string> => {
     try {
-        const datesToBlock = getDatesInRange(bookingData.startDate, bookingData.endDate);
+        const nightsToBlock = getDatesInRange(bookingData.startDate, bookingData.endDate);
         const propertyRef = doc(db, PROPERTY_COLLECTION, bookingData.propertyId);
 
         // 1. Check Property Data & Availability
@@ -80,7 +86,7 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status' |
         const property = propertySnap.data() as Property;
         const currentCalendar = property.calendar || {};
 
-        for (const dateStr of datesToBlock) {
+        for (const dateStr of nightsToBlock) {
             const day = currentCalendar[dateStr];
             if (day && (day.status === 'booked' || day.status === 'blocked')) {
                 throw new Error(`Date ${dateStr} is no longer available.`);
@@ -112,15 +118,15 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'status' |
             paymentMethod: bookingData.paymentMethod || 'credit_card'
         };
 
-        const safeBooking = JSON.parse(JSON.stringify(rawBooking));
+        const safeBooking = sanitizeForFirestore(rawBooking);
         
         const docRef = await addDoc(collection(db, BOOKING_COLLECTION), safeBooking);
         const bookingId = docRef.id;
 
         // 3. Update Property Calendar (Yellow/Pending state)
         const updatedCalendar: any = { ...currentCalendar };
-        datesToBlock.forEach(dateStr => {
-            // Check for existing price, fallback to base price logic if missing (to prevent undefined error)
+        nightsToBlock.forEach(dateStr => {
+            // Check for existing price, fallback to base price logic if missing
             const dateObj = new Date(dateStr);
             const dayOfWeek = dateObj.getDay();
             const isWeekend = dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6;
@@ -189,7 +195,8 @@ export const updateBookingStatus = async (bookingId: string, status: 'confirmed'
         if (propertySnap.exists()) {
              const property = propertySnap.data() as Property;
              const calendar = { ...property.calendar };
-             const dates = getDatesInRange(startDate, endDate);
+             // Use getDatesInRange which returns NIGHTS
+             const nights = getDatesInRange(startDate, endDate);
              
              // Fetch booking to get codes/names if confirming
              let bookingDetails: Booking | null = null;
@@ -197,7 +204,7 @@ export const updateBookingStatus = async (bookingId: string, status: 'confirmed'
                  bookingDetails = await getBookingById(bookingId);
              }
 
-             dates.forEach(dateStr => {
+             nights.forEach(dateStr => {
                  const currentDay = calendar[dateStr];
                  
                  // Fallback price logic for safety

@@ -184,8 +184,8 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
           </div>
       )}
 
-      {/* Analytics Cards - Minimal */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Analytics Cards - Adaptive Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Monthly Revenue" value={`₹${stats.revenue.toLocaleString()}`} icon={<IndianRupee className="w-4 h-4"/>} />
         <StatCard title="Avg. Occupancy" value={`${stats.occupancy}%`} icon={<Activity className="w-4 h-4"/>} />
         <StatCard title="Active Guests" value={stats.activeGuests} icon={<Users className="w-4 h-4"/>} />
@@ -252,7 +252,7 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
 };
 
 const StatCard = ({ title, value, icon }: any) => (
-  <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
+  <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
     <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
         {icon} <span className="text-xs font-medium uppercase tracking-wide">{title}</span>
     </div>

@@ -1,8 +1,8 @@
 
-
 import React, { useState, useEffect } from 'react';
-import { Home, List, Calendar, Settings, LogOut, Menu, X, UserCircle, MessageSquare, Hexagon, Sparkles } from 'lucide-react';
+import { Home, List, Calendar, Settings, LogOut, Menu, X, UserCircle, MessageSquare, Hexagon, Sparkles, Sun, Moon, RefreshCw } from 'lucide-react';
 import { subscribeToConversations } from '../services/chatService';
+import { UserRole } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,9 +11,24 @@ interface LayoutProps {
   userAvatar?: string;
   userName?: string;
   currentUserId?: string;
+  onToggleTheme?: () => void;
+  onSwitchRole?: () => void;
+  isDarkMode?: boolean;
+  currentRole?: UserRole;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, userAvatar, userName, currentUserId }) => {
+export const Layout: React.FC<LayoutProps> = ({ 
+    children, 
+    activePage, 
+    onNavigate, 
+    userAvatar, 
+    userName, 
+    currentUserId,
+    onToggleTheme,
+    onSwitchRole,
+    isDarkMode,
+    currentRole
+}) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -48,7 +63,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate
              <div className="w-9 h-9 bg-gradient-to-br from-gray-800 to-black dark:from-white dark:to-gray-300 rounded-xl flex items-center justify-center text-white dark:text-black font-bold text-lg shadow-md">
                 <Hexagon className="w-5 h-5 fill-current" />
              </div>
-             <span className="font-bold text-lg text-gray-900 dark:text-white hidden sm:block tracking-tight">AI BNB <span className="opacity-50 font-medium">Host</span></span>
+             <span className="font-bold text-lg text-gray-900 dark:text-white tracking-tight">AI BNB <span className="opacity-50 font-medium text-sm ml-1 hidden sm:inline">Host</span></span>
          </div>
          
          {/* Right Side Menu */}
@@ -73,10 +88,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate
             {isMenuOpen && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>
-                    <div className="absolute top-12 right-0 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50 animate-fadeIn origin-top-right">
+                    <div className="absolute top-12 right-0 w-72 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50 animate-fadeIn origin-top-right">
                         <div className="py-2">
                             <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 mb-2">
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{userName || 'Pine Stays'}</p>
+                                <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{userName || 'Pine Stays'}</p>
                                 <p className="text-xs text-gray-500">Superhost</p>
                             </div>
                             {menuItems.map(item => (
@@ -96,6 +111,23 @@ export const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate
                                     {item.label}
                                 </button>
                             ))}
+                            
+                            <div className="h-px bg-gray-100 dark:bg-gray-800 my-2"></div>
+                            
+                            {/* Global Actions in Menu */}
+                            {onToggleTheme && (
+                                <button onClick={() => { onToggleTheme(); }} className="w-full text-left px-6 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center gap-3">
+                                    {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                                    Appearance: {isDarkMode ? 'Dark' : 'Light'}
+                                </button>
+                            )}
+                            
+                            {onSwitchRole && (
+                                <button onClick={() => { onSwitchRole(); setIsMenuOpen(false); }} className="w-full text-left px-6 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center gap-3">
+                                    <RefreshCw className="w-4 h-4" /> Switch to Guest
+                                </button>
+                            )}
+
                             <div className="h-px bg-gray-100 dark:bg-gray-800 my-2"></div>
                             <button className="w-full text-left px-6 py-3 text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors flex items-center gap-3">
                                 <LogOut className="w-4 h-4" /> Logout

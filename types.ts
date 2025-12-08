@@ -1,4 +1,5 @@
 
+
 export enum PropertyType {
   VILLA = 'Villa',
   APARTMENT = 'Apartment',
@@ -194,7 +195,7 @@ export interface ServiceTask {
 }
 
 export interface AIAction {
-    type: 'NAVIGATE' | 'UPDATE_SEARCH' | 'SET_ROLE' | 'UPDATE_PRICE' | 'BLOCK_DATES' | 'APPROVE_BOOKING';
+    type: 'NAVIGATE' | 'UPDATE_SEARCH' | 'SET_ROLE' | 'UPDATE_PRICE' | 'BLOCK_DATES' | 'APPROVE_BOOKING' | 'ADD_PROPERTY' | 'UPDATE_PROPERTY';
     payload: any;
 }
 

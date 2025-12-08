@@ -1,8 +1,7 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { Property, Booking, SearchCriteria, AIAction, UserRole, HostProfile } from '../types';
-import { Compass, Calendar, Heart, Search, Sparkles, MessageSquare, Home, Waves, Crown, Tractor, Mountain, ArrowRight, Star, MapPin, Menu, LogOut, User } from 'lucide-react';
+import { Compass, Calendar, Heart, Search, Sparkles, MessageSquare, Home, Waves, Crown, Tractor, Mountain, ArrowRight, Star, MapPin, Menu, LogOut, User, Sun, Moon, RefreshCw } from 'lucide-react';
 import { fetchGuestBookings, isDateRangeAvailable, getUnavailableDates } from '../services/bookingService';
 import { AIChat } from '../components/AIChat';
 import { CalendarPopup } from '../components/CalendarPopup';
@@ -23,6 +22,9 @@ interface GuestDashboardProps {
   onAction?: (action: AIAction) => void;
   guestProfile?: HostProfile;
   onUpdateProfile?: (p: HostProfile) => void;
+  onToggleTheme?: () => void;
+  onSwitchRole?: () => void;
+  isDarkMode?: boolean;
 }
 
 export const GuestDashboard: React.FC<GuestDashboardProps> = ({ 
@@ -35,7 +37,10 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
     onBook,
     onAction,
     guestProfile,
-    onUpdateProfile
+    onUpdateProfile,
+    onToggleTheme,
+    onSwitchRole,
+    isDarkMode
 }) => {
   const [activeTab, setActiveTab] = useState<'explore' | 'chat' | 'trips' | 'messages' | 'wishlist' | 'profile'>('explore');
   const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
@@ -45,32 +50,24 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
 
   useEffect(() => {
     if (!guestProfile?.id) return;
-    // Subscribe to conversations to sum up Guest Unread Counts
     const unsubscribe = subscribeToConversations(guestProfile.id, (convs) => {
-        // Count CONVERSATIONS with unread messages, not total messages
         const count = convs.filter(c => (c.guestUnreadCount || 0) > 0).length;
         setUnreadCount(count);
     });
     return () => unsubscribe();
   }, [guestProfile?.id]);
 
-  // --- ROBUST FILTERING LOGIC ---
   const filteredProperties = properties.filter(p => {
-    // 1. Location Filter
     const searchLoc = searchCriteria.location.toLowerCase();
     const locMatch = !searchLoc || 
                      p.city.toLowerCase().includes(searchLoc) || 
                      p.location.toLowerCase().includes(searchLoc) ||
                      p.title.toLowerCase().includes(searchLoc);
     
-    // 2. Capacity Filter
     const totalGuests = searchCriteria.adults + searchCriteria.children;
     const capacityMatch = p.maxGuests >= totalGuests;
-
-    // 3. Date Availability Filter
     const dateMatch = isDateRangeAvailable(p, searchCriteria.checkIn, searchCriteria.checkOut);
 
-    // 4. Category Filter
     const categoryMatch = activeCategory === 'all' || 
         (activeCategory === 'pools' && p.amenities.includes('Pool')) ||
         (activeCategory === 'luxe' && p.baseWeekdayPrice > 12000) ||
@@ -146,10 +143,10 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
             {isMenuOpen && (
                 <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>
-                    <div className="absolute top-12 right-0 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50 animate-fadeIn origin-top-right">
+                    <div className="absolute top-12 right-0 w-72 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50 animate-fadeIn origin-top-right">
                         <div className="py-2">
                             <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 mb-2">
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{guestProfile?.name || 'Guest User'}</p>
+                                <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{guestProfile?.name || 'Guest User'}</p>
                                 <p className="text-xs text-gray-500">guest@aibnb.com</p>
                             </div>
                             {[
@@ -176,6 +173,22 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                                     {item.label}
                                 </button>
                             ))}
+                            
+                            <div className="h-px bg-gray-100 dark:bg-gray-800 my-2"></div>
+                            
+                            {onToggleTheme && (
+                                <button onClick={() => { onToggleTheme(); }} className="w-full text-left px-6 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center gap-3">
+                                    {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                                    Appearance: {isDarkMode ? 'Dark' : 'Light'}
+                                </button>
+                            )}
+                            
+                            {onSwitchRole && (
+                                <button onClick={() => { onSwitchRole(); setIsMenuOpen(false); }} className="w-full text-left px-6 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center gap-3">
+                                    <RefreshCw className="w-4 h-4" /> Switch to Host
+                                </button>
+                            )}
+
                             <div className="h-px bg-gray-100 dark:bg-gray-800 my-2"></div>
                             <button className="w-full text-left px-6 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center gap-3">
                                 <LogOut className="w-4 h-4" /> Log out
@@ -194,10 +207,10 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                 {/* Search Bar Container */}
                 <div className="sticky top-0 z-30 pt-4 pb-6 bg-gray-50 dark:bg-black px-4 border-b border-transparent">
                     <div className="max-w-4xl mx-auto space-y-6">
-                        {/* Main Search Pill */}
-                        <div className="bg-white dark:bg-gray-900 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-none border border-gray-200 dark:border-white/10 flex items-center divide-x divide-gray-100 dark:divide-white/5 relative h-16 transition-all hover:shadow-lg">
+                        {/* Main Search Pill - Responsive */}
+                        <div className="bg-white dark:bg-gray-900 rounded-2xl md:rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-none border border-gray-200 dark:border-white/10 flex flex-col md:flex-row md:items-center md:divide-x divide-gray-100 dark:divide-white/5 relative h-auto md:h-16 transition-all hover:shadow-lg p-2 md:p-0 gap-2 md:gap-0">
                             {/* Where */}
-                            <div className="flex-1 px-8 h-full flex flex-col justify-center hover:bg-gray-50 dark:hover:bg-white/5 rounded-l-full cursor-pointer group transition-colors">
+                            <div className="flex-1 px-4 md:px-8 h-12 md:h-full flex flex-col justify-center hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl md:rounded-l-full cursor-pointer group transition-colors">
                                 <label className="text-[10px] font-bold uppercase text-gray-800 dark:text-white block tracking-wider mb-0.5">Where</label>
                                 <input 
                                     className="w-full bg-transparent text-sm text-gray-600 dark:text-gray-300 placeholder-gray-400 border-none outline-none p-0 truncate font-medium group-hover:text-gray-900 dark:group-hover:text-white"
@@ -207,71 +220,73 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                                 />
                             </div>
 
-                            {/* Check In */}
-                            <div 
-                                className="px-8 h-full flex flex-col justify-center hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer transition-colors relative min-w-[140px]"
-                                onClick={() => setActivePicker('checkIn')}
-                            >
-                                <label className="text-[10px] font-bold uppercase text-gray-800 dark:text-white block tracking-wider mb-0.5">Check in</label>
-                                <div className={`text-sm font-medium truncate ${searchCriteria.checkIn ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>
-                                    {searchCriteria.checkIn || 'Add dates'}
-                                </div>
-                                {activePicker === 'checkIn' && (
-                                    <div className="absolute top-[110%] left-0 z-50">
-                                        <CalendarPopup 
-                                            selectedDate={searchCriteria.checkIn}
-                                            startDate={searchCriteria.checkIn}
-                                            endDate={searchCriteria.checkOut}
-                                            minDate={today}
-                                            onSelect={(d) => {
-                                                updateSearch('checkIn', d);
-                                                setActivePicker('checkOut');
-                                            }}
-                                            onClose={() => setActivePicker(null)}
-                                        />
+                            <div className="flex flex-row divide-x divide-gray-100 dark:divide-white/5 w-full md:w-auto h-12 md:h-full">
+                                {/* Check In */}
+                                <div 
+                                    className="flex-1 md:flex-none px-4 md:px-8 h-full flex flex-col justify-center hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer transition-colors relative md:min-w-[140px] rounded-xl md:rounded-none"
+                                    onClick={() => setActivePicker('checkIn')}
+                                >
+                                    <label className="text-[10px] font-bold uppercase text-gray-800 dark:text-white block tracking-wider mb-0.5">Check in</label>
+                                    <div className={`text-sm font-medium truncate ${searchCriteria.checkIn ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>
+                                        {searchCriteria.checkIn || 'Add dates'}
                                     </div>
-                                )}
-                            </div>
+                                    {activePicker === 'checkIn' && (
+                                        <div className="absolute top-[110%] left-0 z-50">
+                                            <CalendarPopup 
+                                                selectedDate={searchCriteria.checkIn}
+                                                startDate={searchCriteria.checkIn}
+                                                endDate={searchCriteria.checkOut}
+                                                minDate={today}
+                                                onSelect={(d) => {
+                                                    updateSearch('checkIn', d);
+                                                    setActivePicker('checkOut');
+                                                }}
+                                                onClose={() => setActivePicker(null)}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
 
-                            {/* Check Out */}
-                            <div 
-                                className="px-8 h-full flex flex-col justify-center hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer transition-colors relative min-w-[140px]"
-                                onClick={() => {
-                                    if(!searchCriteria.checkIn) setActivePicker('checkIn');
-                                    else setActivePicker('checkOut');
-                                }}
-                            >
-                                <label className="text-[10px] font-bold uppercase text-gray-800 dark:text-white block tracking-wider mb-0.5">Check out</label>
-                                <div className={`text-sm font-medium truncate ${searchCriteria.checkOut ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>
-                                    {searchCriteria.checkOut || 'Add dates'}
-                                </div>
-                                {activePicker === 'checkOut' && (
-                                    <div className="absolute top-[110%] right-0 z-50">
-                                        <CalendarPopup 
-                                            selectedDate={searchCriteria.checkOut}
-                                            startDate={searchCriteria.checkIn}
-                                            endDate={searchCriteria.checkOut}
-                                            minDate={searchCriteria.checkIn || today}
-                                            onSelect={(d) => {
-                                                updateSearch('checkOut', d);
-                                                setActivePicker(null);
-                                            }}
-                                            onClose={() => setActivePicker(null)}
-                                        />
+                                {/* Check Out */}
+                                <div 
+                                    className="flex-1 md:flex-none px-4 md:px-8 h-full flex flex-col justify-center hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer transition-colors relative md:min-w-[140px] rounded-xl md:rounded-none"
+                                    onClick={() => {
+                                        if(!searchCriteria.checkIn) setActivePicker('checkIn');
+                                        else setActivePicker('checkOut');
+                                    }}
+                                >
+                                    <label className="text-[10px] font-bold uppercase text-gray-800 dark:text-white block tracking-wider mb-0.5">Check out</label>
+                                    <div className={`text-sm font-medium truncate ${searchCriteria.checkOut ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>
+                                        {searchCriteria.checkOut || 'Add dates'}
                                     </div>
-                                )}
+                                    {activePicker === 'checkOut' && (
+                                        <div className="absolute top-[110%] right-0 z-50">
+                                            <CalendarPopup 
+                                                selectedDate={searchCriteria.checkOut}
+                                                startDate={searchCriteria.checkIn}
+                                                endDate={searchCriteria.checkOut}
+                                                minDate={searchCriteria.checkIn || today}
+                                                onSelect={(d) => {
+                                                    updateSearch('checkOut', d);
+                                                    setActivePicker(null);
+                                                }}
+                                                onClose={() => setActivePicker(null)}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Guests & Search Button */}
-                            <div className="pl-6 pr-2 h-full flex items-center hover:bg-gray-50 dark:hover:bg-white/5 rounded-r-full cursor-pointer gap-4 transition-colors relative">
+                            <div className="pl-4 md:pl-6 pr-2 h-12 md:h-full flex items-center hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl md:rounded-r-full cursor-pointer gap-4 transition-colors relative justify-between w-full md:w-auto">
                                 <div onClick={() => setActivePicker(activePicker === 'guests' ? null : 'guests')} className="min-w-[80px]">
                                     <label className="text-[10px] font-bold uppercase text-gray-800 dark:text-white block tracking-wider mb-0.5">Who</label>
                                     <div className="text-sm font-medium text-gray-600 dark:text-gray-300">
                                         {searchCriteria.adults + searchCriteria.children} guests
                                     </div>
                                 </div>
-                                <div className="w-12 h-12 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform active:scale-95">
-                                    <Search className="w-5 h-5" />
+                                <div className="w-10 h-10 md:w-12 md:h-12 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform active:scale-95">
+                                    <Search className="w-4 h-4 md:w-5 md:h-5" />
                                 </div>
 
                                 {activePicker === 'guests' && (
@@ -304,7 +319,7 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                         </div>
 
                         {/* Category Filter */}
-                        <div className="flex items-center justify-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                        <div className="flex items-center justify-start md:justify-center gap-2 overflow-x-auto pb-2 scrollbar-hide px-1">
                             {CATEGORIES.map(cat => (
                                 <button 
                                     key={cat.id}
@@ -324,7 +339,7 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                 </div>
 
                 {/* Property Grid */}
-                <div className="max-w-[1600px] mx-auto px-6 py-8">
+                <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-8">
                      {filteredProperties.length === 0 ? (
                          <div className="text-center py-24">
                              <div className="bg-gray-100 dark:bg-white/5 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -344,7 +359,7 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                              </button>
                          </div>
                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-8 gap-y-12">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10">
                             {filteredProperties.map(property => (
                                 <div 
                                     key={property.id} 
@@ -372,10 +387,10 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
                                         )}
                                     </div>
                                     
-                                    <div className="space-y-1">
+                                    <div className="space-y-1 px-1">
                                         <div className="flex justify-between items-start">
-                                            <h3 className="font-bold text-gray-900 dark:text-white text-base truncate">{property.city}, {property.state}</h3>
-                                            <div className="flex items-center gap-1 text-sm font-semibold text-gray-900 dark:text-white">
+                                            <h3 className="font-bold text-gray-900 dark:text-white text-base truncate pr-2">{property.city}, {property.state}</h3>
+                                            <div className="flex items-center gap-1 text-sm font-semibold text-gray-900 dark:text-white shrink-0">
                                                 <Star className="w-3.5 h-3.5 fill-current text-gold-500" />
                                                 <span>{property.rating ? property.rating.toFixed(1) : 'New'}</span>
                                             </div>
@@ -418,7 +433,7 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
 
         {/* MESSAGES TAB */}
         {activeTab === 'messages' && (
-             <div className="flex-1 overflow-hidden p-6">
+             <div className="flex-1 overflow-hidden p-0 md:p-6">
                  <Messages currentUserId={guestProfile?.id} userRole={UserRole.GUEST} />
              </div>
         )}
@@ -473,8 +488,8 @@ const TripsView = () => {
     }, []);
 
     return (
-        <div className="max-w-4xl mx-auto w-full p-8 animate-fadeIn pb-32">
-            <h1 className="text-4xl font-extrabold text-gray-900 dark:text-white mb-10 tracking-tight">Your Trips</h1>
+        <div className="max-w-4xl mx-auto w-full p-4 md:p-8 animate-fadeIn pb-32">
+            <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 dark:text-white mb-8 tracking-tight">Your Trips</h1>
             {loading ? (
                 <div className="p-8 text-center text-gray-400">Loading trips...</div>
             ) : bookings.length === 0 ? (
@@ -486,15 +501,15 @@ const TripsView = () => {
                     <p className="text-gray-500 mt-2 mb-8">Time to dust off your bags and start planning.</p>
                 </div>
             ) : (
-                <div className="space-y-8">
+                <div className="space-y-6">
                     <div className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest pl-2">Upcoming</div>
                     {bookings.map(b => (
                         <div 
                             key={b.id} 
                             onClick={() => setSelectedBooking(b)}
-                            className="flex gap-6 bg-white dark:bg-gray-900 p-5 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-xl transition-all cursor-pointer group"
+                            className="flex flex-col sm:flex-row gap-4 sm:gap-6 bg-white dark:bg-gray-900 p-4 sm:p-5 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-xl transition-all cursor-pointer group"
                         >
-                            <div className="w-32 h-32 rounded-2xl overflow-hidden shrink-0">
+                            <div className="w-full sm:w-32 h-40 sm:h-32 rounded-2xl overflow-hidden shrink-0">
                                 <img src={b.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Trip" />
                             </div>
                             <div className="flex-1 flex flex-col justify-center">
@@ -502,7 +517,7 @@ const TripsView = () => {
                                 <div className="text-sm text-gray-500 dark:text-gray-400 mb-4 flex items-center gap-2">
                                     <MapPin className="w-4 h-4" /> {b.location}
                                 </div>
-                                <div className="flex items-center gap-4 text-sm">
+                                <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
                                     <span className="bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white px-3 py-1.5 rounded-lg font-semibold">{b.startDate} — {b.endDate}</span>
                                     {b.status === 'confirmed' && (
                                         <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-lg border border-emerald-100 dark:border-emerald-900">
@@ -521,7 +536,7 @@ const TripsView = () => {
                                     )}
                                 </div>
                             </div>
-                            <div className="flex items-center pr-4">
+                            <div className="hidden sm:flex items-center pr-4">
                                 <div className="p-3 bg-gray-50 dark:bg-white/5 rounded-full group-hover:bg-black group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black transition-all">
                                     <ArrowRight className="w-5 h-5" />
                                 </div>

@@ -46,6 +46,23 @@ export const CalendarPopup: React.FC<CalendarPopupProps> = ({
     const todayStr = today.toISOString().split('T')[0];
     const minDateStr = minDate || todayStr;
 
+    // --- Smart Selection Logic ---
+    // If startDate is present, we are selecting Check-Out date.
+    // If startDate is NOT present, we are selecting Check-In date.
+    const isSelectingCheckOut = !!startDate;
+
+    let limitDate: string | null = null;
+    if (isSelectingCheckOut && startDate && unavailableDates) {
+        // Find the First Unavailable Date AFTER the Start Date.
+        // This effectively creates a "Wall" that the user cannot drag past.
+        // Example: Start 20th. Booked 22nd. 
+        // 21st is valid. 22nd is valid (Check-out morning). 23rd is invalid (Enveloped).
+        const start = new Date(startDate);
+        const sortedUnavailable = Array.from(unavailableDates).sort();
+        
+        limitDate = sortedUnavailable.find(dateStr => dateStr >= startDate) || null;
+    }
+
     const handlePrevMonth = (e: React.MouseEvent) => {
         e.stopPropagation();
         setViewDate(new Date(year, month - 1, 1));
@@ -89,9 +106,30 @@ export const CalendarPopup: React.FC<CalendarPopupProps> = ({
                     const localDateStr = new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
                     
                     const isPast = localDateStr < minDateStr;
-                    const isUnavailable = unavailableDates?.has(localDateStr);
-                    const isDisabled = isPast || isUnavailable;
+                    const isBooked = unavailableDates?.has(localDateStr);
                     
+                    // --- DISABILITY LOGIC ---
+                    let isDisabled = false;
+
+                    if (isSelectingCheckOut) {
+                        // CHECK-OUT MODE
+                        // 1. Cannot be before start date
+                        if (localDateStr <= (startDate || '')) isDisabled = true;
+                        
+                        // 2. If we found a "limit date" (blocked date after start), disable everything strictly AFTER it.
+                        // We allow selecting the limit date itself (check-out morning).
+                        if (limitDate && localDateStr > limitDate) isDisabled = true;
+                        
+                    } else {
+                        // CHECK-IN MODE
+                        // Strictly disable all booked dates. Cannot check in on a booked night.
+                        if (isBooked) isDisabled = true;
+                    }
+
+                    // Global disable for past dates
+                    if (isPast) isDisabled = true;
+
+                    // --- VISUAL STATES ---
                     const isSelected = selectedDate === localDateStr;
                     const isToday = localDateStr === todayStr;
 
@@ -100,6 +138,10 @@ export const CalendarPopup: React.FC<CalendarPopupProps> = ({
                     const isRangeEnd = endDate === localDateStr;
                     const isInRange = startDate && endDate && localDateStr > startDate && localDateStr < endDate;
                     const isHighlight = isSelected || isRangeStart || isRangeEnd;
+
+                    // Specific style for "Checkout Only" dates (Booked but valid as checkout)
+                    // This happens when selecting a checkout date, and the date is booked, but it's the 'limitDate' (start of next booking)
+                    const isBookedButValid = isSelectingCheckOut && isBooked && !isDisabled;
 
                     return (
                         <div key={day} className="h-10 w-full relative flex items-center justify-center">
@@ -120,11 +162,14 @@ export const CalendarPopup: React.FC<CalendarPopupProps> = ({
                                         ? 'bg-gray-900 dark:bg-white text-white dark:text-black shadow-lg scale-105' 
                                         : isDisabled 
                                             ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' 
-                                            : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white border border-transparent'
+                                            : isBookedButValid 
+                                                ? 'border-2 border-dashed border-amber-400 dark:border-amber-500 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 font-bold'
+                                                : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 hover:text-black dark:hover:text-white border border-transparent'
                                     }
-                                    ${isUnavailable && !isPast ? 'line-through decoration-red-400 opacity-50' : ''}
+                                    ${isBooked && !isHighlight && !isBookedButValid ? 'line-through decoration-red-400 opacity-50' : ''}
                                     ${isToday && !isHighlight && !isDisabled ? 'ring-1 ring-gray-900 dark:ring-white text-gray-900 dark:text-white font-bold' : ''}
                                 `}
+                                title={isBookedButValid ? "Check-out Only" : ""}
                             >
                                 {day}
                             </button>

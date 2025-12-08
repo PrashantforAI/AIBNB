@@ -1,4 +1,6 @@
 
+
+
 import { GoogleGenAI, Chat, GenerativeModel } from "@google/genai";
 import { AI_SYSTEM_INSTRUCTION, AI_MESSAGE_REGULATOR_INSTRUCTION } from '../constants';
 import { AIAction, Property, Booking } from '../types';
@@ -151,6 +153,31 @@ const getMockResponse = (message: string): string => {
     }
 
     // --- GUEST CONCIERGE INTENTS ---
+    // 1. Explicit SEARCH Trigger (Location + Guests + Date mention)
+    const knownLocations = ['lonavala', 'goa', 'jaipur', 'alibaug', 'mumbai', 'delhi', 'udaipur', 'manali', 'shimla', 'kerala'];
+    const foundLocation = knownLocations.find(l => lowerMsg.includes(l));
+    const hasNumber = /\d/.test(lowerMsg) || lowerMsg.includes('one') || lowerMsg.includes('two') || lowerMsg.includes('three');
+
+    if (foundLocation && hasNumber) {
+        // Extract Guests (heuristic)
+        const guestMatch = lowerMsg.match(/(\d+)\s*(guest|person|people|adult|pax)/);
+        const guests = guestMatch ? parseInt(guestMatch[1]) : 2;
+        
+        // Capitalize location
+        const locationStr = foundLocation.charAt(0).toUpperCase() + foundLocation.slice(1);
+        
+        // Dynamic Dates (Default to next weekend roughly)
+        const getFutureDate = (days: number) => {
+            const d = new Date();
+            d.setDate(d.getDate() + days);
+            return d.toISOString().split('T')[0];
+        };
+        const checkIn = getFutureDate(5);
+        const checkOut = getFutureDate(7);
+
+        return `Searching for properties in ${locationStr} for ${guests} guests...\n\n[ACTION: {"type": "SEARCH_PROPERTIES", "payload": {"location": "${locationStr}", "checkIn": "${checkIn}", "checkOut": "${checkOut}", "guests": ${guests}}}]`;
+    }
+
     if (lowerMsg.includes('lonavala') || lowerMsg.includes('villa')) {
         return "I highly recommend **Saffron Villa**. It's a stunning 4BHK with a private pool and mountain views, perfect for your group. \n\n[PROPERTY: 1]";
     }
@@ -324,7 +351,7 @@ export const generateHostInsights = async (properties: Property[], bookings: Boo
 
 export const parseAIResponse = (response: string): { text: string, actions: AIAction[] } => {
     const actions: AIAction[] = [];
-    const text = response.replace(/\[ACTION: (.+?)\]/g, (match, json) => {
+    const text = response.replace(/\[ACTION: ([\s\S]+?)\]/g, (match, json) => {
         try {
             actions.push(JSON.parse(json));
             return ''; 

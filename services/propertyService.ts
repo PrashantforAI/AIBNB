@@ -5,6 +5,36 @@ import { Property, DaySettings } from '../types';
 
 const COLLECTION_NAME = 'properties';
 
+// Helper to sanitize data (Remove undefined, handle circular refs)
+export const sanitizeForFirestore = (obj: any): any => {
+    const seen = new WeakSet();
+    const clean = (input: any): any => {
+        if (input === undefined) return undefined;
+        if (input === null) return null;
+        if (typeof input !== 'object') return input;
+        if (input instanceof Date) return input.toISOString();
+        
+        if (seen.has(input)) return null; // Break cycle
+        seen.add(input);
+
+        if (Array.isArray(input)) {
+            return input.map(clean).filter(v => v !== undefined);
+        }
+
+        const output: any = {};
+        for (const key in input) {
+            if (Object.prototype.hasOwnProperty.call(input, key)) {
+                const value = clean(input[key]);
+                if (value !== undefined) {
+                    output[key] = value;
+                }
+            }
+        }
+        return output;
+    };
+    return clean(obj);
+};
+
 // Fetch all properties
 export const fetchProperties = async (): Promise<Property[]> => {
   try {
@@ -40,9 +70,8 @@ export const savePropertyToDb = async (property: Property) => {
         property.id = Date.now().toString();
     }
     
-    // CRITICAL FIX: Firestore throws an error if fields are 'undefined'. 
-    // We sanitize the object by stringifying and parsing it, which removes undefined keys.
-    const safeData = JSON.parse(JSON.stringify(property));
+    // Replace crash-prone JSON.stringify with robust sanitizer
+    const safeData = sanitizeForFirestore(property);
 
     // Check payload size roughly
     const size = new Blob([JSON.stringify(safeData)]).size;

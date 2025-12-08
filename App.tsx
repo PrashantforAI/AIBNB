@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { HostDashboard } from './pages/HostDashboard';
@@ -12,7 +11,7 @@ import { HostProfilePage } from './pages/HostProfile';
 import { Messages } from './pages/Messages'; 
 import { AIChat } from './components/AIChat';
 import { MOCK_PROPERTIES, AI_SYSTEM_INSTRUCTION, AI_GUEST_INSTRUCTION, AI_HOST_BRAIN_INSTRUCTION, AI_SERVICE_INSTRUCTION, MOCK_TASKS, MOCK_HOST_PROFILE } from './constants';
-import { Property, DaySettings, Booking, SearchCriteria, UserRole, ServiceTask, AIAction, HostProfile } from './types';
+import { Property, DaySettings, Booking, SearchCriteria, UserRole, ServiceTask, AIAction, HostProfile, PropertyType } from './types';
 import { fetchProperties, savePropertyToDb, updateCalendarDay } from './services/propertyService';
 import { createBooking, fetchGuestBookings, fetchPendingBookings, updateBookingStatus } from './services/bookingService';
 import { startConversation, sendMessage } from './services/chatService'; 
@@ -83,6 +82,13 @@ function App() {
       localStorage.setItem('theme', newTheme);
       if (newTheme === 'dark') document.documentElement.classList.add('dark');
       else document.documentElement.classList.remove('dark');
+  };
+
+  const switchRole = () => {
+      const next = userRole === UserRole.HOST ? UserRole.GUEST : UserRole.HOST;
+      setUserRole(next);
+      setViewMode('landing-chat'); 
+      setActivePage(next === UserRole.HOST ? 'dashboard' : 'guest-dashboard');
   };
 
   const loadData = async () => {
@@ -317,6 +323,93 @@ function App() {
               }
           }
       }
+
+      if (action.type === 'ADD_PROPERTY') {
+          const { title, city, basePrice, description, type, tempId, amenities } = action.payload;
+          
+          // Generate ID: Use tempId from AI if available (preferred for chaining), else fallback
+          const newId = tempId || `prop_${Date.now()}`;
+          
+          const newProp: Property = {
+              id: newId,
+              title: title || 'New Property',
+              description: description || 'AI Generated Listing. Review details.',
+              type: type || PropertyType.VILLA,
+              status: 'draft', // Safety first
+              address: 'Address pending', 
+              location: city || 'Unknown', 
+              city: city || 'Unknown', 
+              state: 'Maharashtra', // Default
+              country: 'India', 
+              pincode: '000000',
+              gpsLocation: { lat: 18.75, lng: 73.40 }, // Default Lonavala center
+              bedrooms: 3, 
+              bathrooms: 3, 
+              poolType: 'NA', 
+              parking: true, 
+              petFriendly: false,
+              kitchenAvailable: true, 
+              nonVegAllowed: true, 
+              mealsAvailable: false,
+              checkInTime: '13:00', 
+              checkOutTime: '11:00',
+              caretakerAvailable: false,
+              baseGuests: 6, 
+              maxGuests: 10,
+              currency: 'INR', 
+              baseWeekdayPrice: basePrice || 10000, 
+              baseWeekendPrice: (basePrice ? basePrice * 1.4 : 14000), 
+              extraGuestPrice: 1000,
+              amenities: amenities || ['Wifi', 'AC'], 
+              mealPlans: [], 
+              addOns: [], 
+              pricingRules: [], 
+              calendar: {}, 
+              images: ['https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&q=80&w=1000'], // Placeholder
+              reviews: [], 
+              occupancyRate: 0, 
+              revenueLastMonth: 0,
+              hostId: currentUserId
+          };
+
+          try {
+              await savePropertyToDb(newProp);
+              await refreshProperties();
+              // Auto-navigate to editor for refinement
+              handleEditProperty(newProp);
+          } catch(e) {
+              console.error("Failed to add property via AI", e);
+          }
+      }
+
+      if (action.type === 'UPDATE_PROPERTY') {
+          const { propertyId, ...updates } = action.payload;
+          
+          // Find property by ID (or tempId if AI used it recently)
+          const propToUpdate = properties.find(p => p.id === propertyId);
+          
+          if (propToUpdate) {
+              // Handle special fields
+              const updatedProp = { ...propToUpdate, ...updates };
+              
+              // Map AI 'mapLocation' to internal 'gpsLocation'
+              if (updates.mapLocation) {
+                  updatedProp.gpsLocation = {
+                      lat: updates.mapLocation.latitude || updates.mapLocation.lat,
+                      lng: updates.mapLocation.longitude || updates.mapLocation.lng
+                  };
+              }
+
+              try {
+                  await savePropertyToDb(updatedProp);
+                  await refreshProperties();
+              } catch(e) {
+                  console.error("Failed to update property via AI", e);
+              }
+          } else {
+              console.warn(`Property with ID ${propertyId} not found for update.`);
+          }
+      }
   };
 
   const enterDashboard = () => {
@@ -414,23 +507,6 @@ function App() {
   return (
     <div className="text-gray-900 dark:text-gray-100 font-sans flex flex-col h-[100dvh] overflow-hidden relative bg-gray-50 dark:bg-black transition-colors duration-300">
       
-      {/* Toggles */}
-      <div className="fixed bottom-6 left-6 z-[70] flex flex-col gap-3 group">
-          <button onClick={toggleTheme} className="w-12 h-12 rounded-full shadow-lg border border-white/20 bg-white/80 dark:bg-gray-900/80 backdrop-blur text-black dark:text-yellow-400 flex items-center justify-center hover:scale-110 transition-transform">
-             <Sun className="w-5 h-5 hidden dark:block"/><Moon className="w-5 h-5 block dark:hidden"/>
-          </button>
-          
-          <button onClick={() => {
-              // TOGGLE LOGIC: Only Host <-> Guest (Service Mode Removed)
-              const next = userRole === UserRole.HOST ? UserRole.GUEST : UserRole.HOST;
-              setUserRole(next);
-              setViewMode('landing-chat'); 
-              setActivePage(next === UserRole.HOST ? 'dashboard' : 'guest-dashboard');
-          }} className="flex items-center gap-2 px-4 py-3 rounded-full shadow-lg border border-white/20 bg-white/80 dark:bg-gray-900/80 backdrop-blur text-sm font-bold hover:scale-105 transition-transform">
-             {userRole === UserRole.HOST ? 'Switch to Guest' : 'Switch to Host'}
-          </button>
-      </div>
-
       <div className="flex-1 flex flex-col relative z-0 overflow-hidden">
         
         {/* === 1. LANDING CHAT (ALL ROLES) === */}
@@ -458,6 +534,10 @@ function App() {
                         userAvatar={hostProfile.avatar}
                         userName={hostProfile.name}
                         currentUserId={currentUserId}
+                        onToggleTheme={toggleTheme}
+                        onSwitchRole={switchRole}
+                        isDarkMode={theme === 'dark'}
+                        currentRole={UserRole.HOST}
                     >
                         {isEditorOpen ? <PropertyEditor initialData={editingProperty} onSave={handleSaveProperty} onCancel={() => setIsEditorOpen(false)} /> : (
                         <>
@@ -499,7 +579,10 @@ function App() {
                                 onBook={handleAiBooking}
                                 onAction={handleAIAction}
                                 guestProfile={guestProfile}
-                                onUpdateProfile={handleSaveProfile} // Use the robust save handler
+                                onUpdateProfile={handleSaveProfile}
+                                onToggleTheme={toggleTheme}
+                                onSwitchRole={switchRole}
+                                isDarkMode={theme === 'dark'}
                             />
                         )}
 
@@ -510,8 +593,7 @@ function App() {
                         )}
                     </>
                 ) : (
-                    // Service Mode Fallback (Hidden in toggle but kept for safety if state persists)
-                    <Layout activePage={activePage} onNavigate={handleNavigate}>
+                    <Layout activePage={activePage} onNavigate={handleNavigate} onToggleTheme={toggleTheme} onSwitchRole={switchRole} isDarkMode={theme === 'dark'} currentRole={UserRole.HOST}>
                         <div className="p-8 text-center">Service Mode is currently unavailable.</div>
                     </Layout>
                 )}
