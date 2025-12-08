@@ -11,6 +11,7 @@ import { ServiceProviderDashboard } from './pages/ServiceProviderDashboard';
 import { HostProfilePage } from './pages/HostProfile';
 import { Messages } from './pages/Messages'; 
 import { AIChat } from './components/AIChat';
+import { HostOnboardingChat } from './components/HostOnboardingChat';
 import { MOCK_PROPERTIES, AI_SYSTEM_INSTRUCTION, AI_GUEST_INSTRUCTION, AI_HOST_BRAIN_INSTRUCTION, AI_SERVICE_INSTRUCTION, MOCK_TASKS, MOCK_HOST_PROFILE } from './constants';
 import { Property, DaySettings, Booking, SearchCriteria, UserRole, ServiceTask, AIAction, HostProfile, PropertyType } from './types';
 import { fetchProperties, savePropertyToDb, updateCalendarDay } from './services/propertyService';
@@ -28,6 +29,7 @@ function App() {
   const [editingProperty, setEditingProperty] = useState<Property | undefined>(undefined);
   const [previewProperty, setPreviewProperty] = useState<Property | undefined>(undefined);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isAIOnboardingOpen, setIsAIOnboardingOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [permissionError, setPermissionError] = useState(false);
   
@@ -203,6 +205,13 @@ function App() {
   const handlePreviewProperty = (prop: Property) => { setPreviewProperty(prop); setActivePage('guest-view'); setViewMode('dashboard'); };
   const handleAddNew = () => { setEditingProperty(undefined); setIsEditorOpen(true); };
   
+  // HANDLER: Finish AI Onboarding
+  const handleFinishAIListing = (collectedData: Partial<Property>) => {
+      setIsAIOnboardingOpen(false);
+      setEditingProperty(collectedData as Property); // Pre-fill editor with AI data
+      setIsEditorOpen(true);
+  };
+
   const handleSaveProperty = async (prop: Property) => {
     // If it's a NEW property (status draft or no ID yet, though ID might be set by frontend logic earlier)
     // The backend add_property creates a new doc.
@@ -585,9 +594,20 @@ function App() {
                         isDarkMode={theme === 'dark'}
                         currentRole={UserRole.HOST}
                     >
-                        {isEditorOpen ? <PropertyEditor initialData={editingProperty} onSave={handleSaveProperty} onCancel={() => setIsEditorOpen(false)} /> : (
+                        {isEditorOpen ? (
+                            <PropertyEditor 
+                                initialData={editingProperty} 
+                                onSave={handleSaveProperty} 
+                                onCancel={() => setIsEditorOpen(false)} 
+                            />
+                        ) : isAIOnboardingOpen ? (
+                            <HostOnboardingChat 
+                                onClose={() => setIsAIOnboardingOpen(false)} 
+                                onFinish={handleFinishAIListing} 
+                            />
+                        ) : (
                         <>
-                            {activePage === 'dashboard' && <HostDashboard properties={properties} onNavigate={handleNavigate} onRefresh={refreshProperties} />}
+                            {activePage === 'dashboard' && <HostDashboard properties={properties} onNavigate={handleNavigate} onRefresh={refreshProperties} onStartAIListing={() => setIsAIOnboardingOpen(true)} />}
                             {activePage === 'ai-concierge' && (
                                 <div className="h-full flex flex-col">
                                     <AIChat 

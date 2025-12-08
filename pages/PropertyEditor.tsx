@@ -6,7 +6,7 @@ import { suggestPricing } from '../services/aiService';
 import { 
   Wand2, Save, Plus, Trash2, IndianRupee, MapPin, 
   Home, Users, Clock, Camera, ChevronRight, ChevronLeft, Check,
-  Utensils, BedDouble, Bath, Car, Dog, Wifi, UserCheck, Droplets, Shield, FileText, Sparkles, Coffee, PartyPopper, Briefcase, Heart, Palmtree, ChefHat, Loader2
+  Utensils, BedDouble, Bath, Car, Dog, Wifi, UserCheck, Droplets, Shield, FileText, Sparkles, Coffee, PartyPopper, Briefcase, Heart, Palmtree, ChefHat, Loader2, ShieldCheck, AlertTriangle, CheckCircle2
 } from 'lucide-react';
 import { AMENITIES_LIST } from '../constants';
 import { LocationPicker } from '../components/LocationPicker';
@@ -143,6 +143,11 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
   const [propertyVibe, setPropertyVibe] = useState('Peaceful');
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // New States for AI Agents
+  const [aiReasoning, setAiReasoning] = useState<string | null>(null);
+  const [complianceStatus, setComplianceStatus] = useState<{ compliant: boolean, missing: string[], suggestions: string } | null>(null);
+  const [isCheckingCompliance, setIsCheckingCompliance] = useState(false);
+  
   const [formData, setFormData] = useState<Partial<Property>>(initialData || {
     title: '',
     type: PropertyType.VILLA,
@@ -248,21 +253,68 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
   const handleAiPricing = async () => {
       if (!formData.city || !formData.type) return;
       setIsGenerating(true);
-      const result = await suggestPricing(formData.city, formData.type);
+      setAiReasoning(null);
+      
       try {
-          const json = JSON.parse(result);
-          if (json.baseWeekdayPrice) {
-              setFormData(prev => ({
-                  ...prev,
-                  baseWeekdayPrice: json.baseWeekdayPrice,
-                  baseWeekendPrice: json.baseWeekendPrice || (json.baseWeekdayPrice * 1.4),
-                  pricingRules: json.rules || []
-              }));
+          // New Backend Agent Call
+          const response = await callAICore('get_pricing_suggestion', {
+              location: { city: formData.city },
+              amenities: formData.amenities,
+              type: formData.type
+          }, 'host', 'host1');
+
+          if (response.data) {
+              const { suggestedPrice, reasoning } = response.data;
+              if (suggestedPrice) {
+                  setFormData(prev => ({
+                      ...prev,
+                      baseWeekdayPrice: suggestedPrice,
+                      baseWeekendPrice: Math.round(suggestedPrice * 1.4),
+                  }));
+                  setAiReasoning(reasoning);
+              }
           }
       } catch (e) {
-          console.error("Pricing parse error", e);
+          console.error("Pricing error", e);
+          alert("Could not fetch pricing suggestion. Trying fallback.");
+          // Fallback to local shim if backend fails
+          const result = await suggestPricing(formData.city, formData.type);
+          try {
+              const json = JSON.parse(result);
+              if (json.baseWeekdayPrice) {
+                  setFormData(prev => ({
+                      ...prev,
+                      baseWeekdayPrice: json.baseWeekdayPrice,
+                      baseWeekendPrice: json.baseWeekendPrice || (json.baseWeekdayPrice * 1.4),
+                  }));
+              }
+          } catch(err) {}
+      } finally {
+          setIsGenerating(false);
       }
-      setIsGenerating(false);
+  };
+
+  const handleCheckCompliance = async () => {
+      setIsCheckingCompliance(true);
+      setComplianceStatus(null);
+      try {
+          const response = await callAICore('check_compliance', {
+              rules: formData.rules,
+              location: formData.city
+          }, 'host', 'host1');
+
+          if (response.data) {
+              setComplianceStatus({
+                  compliant: response.data.compliant,
+                  missing: response.data.missingSafetyRules || [],
+                  suggestions: response.data.suggestions
+              });
+          }
+      } catch (e) {
+          console.error("Compliance check failed", e);
+      } finally {
+          setIsCheckingCompliance(false);
+      }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -365,7 +417,6 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
                     </div>
                 </div>
             );
-        // ... (Cases 2-5 same logic but just render function, keeping concise here for update)
         case 2:
             return (
                 <div className="animate-fadeIn space-y-8">
@@ -393,7 +444,6 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
                              </div>
                         </div>
                     </div>
-                    {/* ... rest of step 2 ... */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <ToggleCard checked={formData.parking || false} onChange={(v) => handleChange('parking', v)} title="Parking Available" icon={Car} />
                         <ToggleCard checked={formData.petFriendly || false} onChange={(v) => handleChange('petFriendly', v)} title="Pet Friendly" icon={Dog} />
@@ -467,9 +517,47 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
                             </div>
                         </div>
                     </div>
-                    {/* ... Rules section condensed for brevity but functionally same ... */}
+                    
+                    {/* Rules & Compliance Section - ENHANCED */}
                     <div className="pt-6">
-                        <SectionHeader title="House Rules & Policies" icon={Shield} />
+                        <div className="flex justify-between items-center mb-6 border-b border-gray-100 dark:border-gray-800 pb-3">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-brand-50 dark:bg-brand-900/20 rounded-lg text-brand-600 dark:text-brand-400"><Shield className="w-5 h-5" /></div>
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-white">House Rules & Compliance</h3>
+                            </div>
+                            <button 
+                                onClick={handleCheckCompliance}
+                                disabled={isCheckingCompliance}
+                                className="text-xs font-bold bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-300 px-3 py-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {isCheckingCompliance ? <Loader2 className="w-3 h-3 animate-spin"/> : <ShieldCheck className="w-3 h-3"/>}
+                                Verify Safety
+                            </button>
+                        </div>
+
+                        {complianceStatus && (
+                            <div className={`mb-6 p-4 rounded-xl border ${complianceStatus.compliant ? 'bg-green-50 border-green-100 dark:bg-green-900/20 dark:border-green-900' : 'bg-amber-50 border-amber-100 dark:bg-amber-900/20 dark:border-amber-900'}`}>
+                                <div className="flex items-start gap-3">
+                                    {complianceStatus.compliant ? <CheckCircle2 className="w-5 h-5 text-green-600"/> : <AlertTriangle className="w-5 h-5 text-amber-600"/>}
+                                    <div>
+                                        <h4 className={`text-sm font-bold ${complianceStatus.compliant ? 'text-green-800 dark:text-green-300' : 'text-amber-800 dark:text-amber-300'}`}>
+                                            {complianceStatus.compliant ? "Compliance Verified" : "Safety Attention Needed"}
+                                        </h4>
+                                        <p className="text-xs mt-1 text-gray-600 dark:text-gray-400">{complianceStatus.suggestions}</p>
+                                        {!complianceStatus.compliant && complianceStatus.missing.length > 0 && (
+                                            <ul className="mt-2 space-y-1">
+                                                {complianceStatus.missing.map((rule, i) => (
+                                                    <li key={i} className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                                                        <div className="w-1 h-1 bg-amber-500 rounded-full"/> {rule}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="bg-white dark:bg-gray-900 p-6 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm space-y-6">
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div><FormLabel>Security Deposit (₹)</FormLabel><Input type="number" value={formData.rules?.securityDeposit} onChange={e => handleRuleChange('securityDeposit', parseInt(e.target.value))} /></div>
@@ -482,15 +570,27 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
         case 4:
             return (
                 <div className="animate-fadeIn space-y-8">
-                    <div className="bg-gradient-to-r from-blue-50 to-brand-50 dark:from-blue-900/20 dark:to-brand-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-900 flex flex-col md:flex-row justify-between items-center shadow-sm gap-4">
-                        <div>
-                            <h4 className="font-bold text-blue-900 dark:text-blue-300 text-lg">Smart Pricing Assistant</h4>
-                            <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">Get data-driven price suggestions based on market trends.</p>
+                    {/* Smart Pricing Banner - ENHANCED */}
+                    <div className="bg-gradient-to-r from-blue-50 to-brand-50 dark:from-blue-900/20 dark:to-brand-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-900 shadow-sm">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                            <div>
+                                <h4 className="font-bold text-blue-900 dark:text-blue-300 text-lg flex items-center gap-2">
+                                    <Sparkles className="w-5 h-5"/> Smart Pricing Assistant
+                                </h4>
+                                <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">Get data-driven price suggestions based on market trends.</p>
+                            </div>
+                            <button onClick={handleAiPricing} disabled={isGenerating} className="bg-white dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:shadow-md border border-blue-200 dark:border-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 whitespace-nowrap">
+                                {isGenerating ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div> : <Wand2 className="w-4 h-4" />} Suggest Price
+                            </button>
                         </div>
-                        <button onClick={handleAiPricing} disabled={isGenerating} className="bg-white dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm hover:shadow-md border border-blue-200 dark:border-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 whitespace-nowrap">
-                            {isGenerating ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div> : <Wand2 className="w-4 h-4" />} Suggest Pricing
-                        </button>
+                        
+                        {aiReasoning && (
+                            <div className="bg-white/60 dark:bg-black/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-300 leading-relaxed animate-fadeIn">
+                                <span className="font-bold">AI Insight:</span> {aiReasoning}
+                            </div>
+                        )}
                     </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-6">
                             <SectionHeader title="Guest Capacity" icon={Users} />

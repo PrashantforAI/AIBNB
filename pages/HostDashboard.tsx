@@ -21,9 +21,10 @@ interface HostDashboardProps {
   properties: Property[];
   onNavigate: (page: string) => void;
   onRefresh?: () => void;
+  onStartAIListing?: () => void;
 }
 
-export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavigate, onRefresh }) => {
+export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavigate, onRefresh, onStartAIListing }) => {
   // Stats State
   const [stats, setStats] = useState({
       revenue: 0,
@@ -143,11 +144,19 @@ export const HostDashboard: React.FC<HostDashboardProps> = ({ properties, onNavi
 
   return (
     <div className="space-y-8 animate-fadeIn pb-20">
-      <header className="flex justify-between items-end">
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
            <h1 className="text-3xl font-semibold text-gray-900 dark:text-white tracking-tight">Overview</h1>
            <p className="text-gray-500 dark:text-gray-400 mt-1">Portfolio performance</p>
         </div>
+        {onStartAIListing && (
+            <button 
+                onClick={onStartAIListing}
+                className="bg-gradient-to-r from-brand-600 to-purple-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-lg hover:shadow-brand-500/20 transition-all active:scale-95"
+            >
+                <Sparkles className="w-4 h-4" /> List with AI Assistant
+            </button>
+        )}
       </header>
 
       {/* Booking Requests */}
