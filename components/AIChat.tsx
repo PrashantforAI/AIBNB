@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { sendMessageToAI, initializeChat, parseAIResponse } from '../services/aiService';
 import { ChatMessage, Property, AIAction, UserRole } from '../types';
-import { MessageSquare, X, Send, Sparkles, Loader2, Bot, ArrowRight, Star, CheckCircle, Calendar, MapPin, LayoutDashboard, Zap, AlertTriangle, Minus, Plus, Mic, StopCircle, Hotel } from 'lucide-react';
+import { MessageSquare, X, Send, Sparkles, Loader2, Bot, ArrowRight, Star, CheckCircle, Calendar, MapPin, LayoutDashboard, Zap, AlertTriangle, Minus, Plus, Mic, StopCircle, Hotel, BedDouble, Bath, Home, ShieldCheck } from 'lucide-react';
 import { CalendarPopup } from './CalendarPopup';
 import { getUnavailableDates } from '../services/bookingService';
 
@@ -82,8 +81,15 @@ const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promis
         
         let baseTotal = 0;
         days.forEach(d => {
-            const isWeekend = d.getDay() === 0 || d.getDay() === 5 || d.getDay() === 6;
-            baseTotal += isWeekend ? propertyDetails.baseWeekendPrice : propertyDetails.baseWeekdayPrice;
+            const dateStr = d.toISOString().split('T')[0];
+            const daySettings = propertyDetails.calendar?.[dateStr];
+            
+            if (daySettings?.price) {
+                baseTotal += daySettings.price;
+            } else {
+                const isWeekend = d.getDay() === 0 || d.getDay() === 5 || d.getDay() === 6;
+                baseTotal += isWeekend ? propertyDetails.baseWeekendPrice : propertyDetails.baseWeekdayPrice;
+            }
         });
         const extraFee = Math.max(0, guests - propertyDetails.baseGuests) * (propertyDetails.extraGuestPrice || 0) * days.length;
         const fees = Math.round((baseTotal + extraFee) * 0.26); // Taxes
@@ -169,44 +175,198 @@ const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promis
     );
 };
 
-const FormattedMessage = ({ text, properties, onPreview, onBook }: { text: string, properties?: Property[], onPreview?: (p: Property) => void, onBook?: (b: any) => Promise<void> }) => {
-  const parts = text.split(/(\[PROPERTY: .+?\]|\[BOOKING_INTENT: .+?\]|\[ACTION: .+?\])/g);
+const ListingPreviewCard: React.FC<{ previewData: any; onConfirm: (data: any) => void }> = ({ previewData, onConfirm }) => {
+    const [status, setStatus] = useState<'idle' | 'creating' | 'done'>('idle');
+
+    const handleCreate = () => {
+        setStatus('creating');
+        onConfirm({ type: 'ADD_PROPERTY', payload: previewData });
+        // Assume success after short delay from parent prop update, but show UI feedback immediately
+        setTimeout(() => setStatus('done'), 1500);
+    };
+
+    if (status === 'done') {
+        return (
+            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl border border-green-200 dark:border-green-800 text-center my-3 max-w-sm flex items-center justify-center gap-3">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <span className="text-sm font-bold text-green-800 dark:text-green-300">Listing Created Successfully!</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg my-4 max-w-sm overflow-hidden ring-1 ring-black/5">
+            <div className="h-32 bg-gray-100 dark:bg-gray-800 relative">
+                <img 
+                    src={previewData.images?.[0] || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&q=80&w=1000'} 
+                    alt="Preview" 
+                    className="w-full h-full object-cover"
+                />
+                <div className="absolute top-3 left-3 bg-black/50 backdrop-blur px-2 py-1 rounded-md text-white text-[10px] font-bold uppercase tracking-wider">
+                    Draft Preview
+                </div>
+            </div>
+            <div className="p-5 space-y-4">
+                <div>
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white leading-tight">{previewData.title || 'New Property'}</h3>
+                    <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        <MapPin className="w-3.5 h-3.5" /> {previewData.city}, {previewData.state}
+                    </div>
+                </div>
+
+                <div className="flex gap-4 border-y border-gray-100 dark:border-gray-800 py-3">
+                    <div className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                        <BedDouble className="w-4 h-4 text-gray-400" /> {previewData.bedrooms} Bed
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                        <Bath className="w-4 h-4 text-gray-400" /> {previewData.bathrooms} Bath
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                        <Home className="w-4 h-4 text-gray-400" /> {previewData.type}
+                    </div>
+                </div>
+
+                {/* --- NEW FINANCIALS SECTION --- */}
+                {(previewData.securityDeposit || previewData.refundPolicy) && (
+                    <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg space-y-2">
+                        <div className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                            <ShieldCheck className="w-3.5 h-3.5" /> Financials
+                        </div>
+                        <div className="flex justify-between text-xs">
+                            <span className="text-gray-600 dark:text-gray-300">Security Deposit</span>
+                            <span className="font-bold text-gray-900 dark:text-white">₹{previewData.securityDeposit || 0}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                            <span className="text-gray-600 dark:text-gray-300">Refund</span>
+                            <span className="font-medium text-gray-900 dark:text-white truncate max-w-[120px]">{previewData.refundPolicy || 'Standard'}</span>
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex justify-between items-end">
+                    <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Base Price</p>
+                        <p className="text-xl font-bold text-gray-900 dark:text-white">₹{previewData.baseWeekdayPrice?.toLocaleString()}</p>
+                    </div>
+                    <button 
+                        onClick={handleCreate}
+                        disabled={status === 'creating'}
+                        className="bg-black dark:bg-white text-white dark:text-black px-6 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity flex items-center gap-2"
+                    >
+                        {status === 'creating' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        Create Listing
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Simple Markdown Renderer
+const MarkdownText: React.FC<{ text: string }> = ({ text }) => {
+    return (
+        <div>
+            {text.split('\n').map((line, i) => {
+                if (!line.trim()) return <div key={i} className="h-2" />;
+                const bolded = line.split(/(\*\*.*?\*\*)/g).map((chunk, j) => 
+                    chunk.startsWith('**') && chunk.endsWith('**') 
+                    ? <strong key={j} className="font-semibold text-gray-900 dark:text-white">{chunk.slice(2, -2)}</strong> 
+                    : chunk
+                );
+                return <p key={i} className="mb-1">{bolded}</p>;
+            })}
+        </div>
+    );
+};
+
+const FormattedMessage = ({ text, properties, onPreview, onBook, onAction }: { text: string, properties?: Property[], onPreview?: (p: Property) => void, onBook?: (b: any) => Promise<void>, onAction?: (a: AIAction) => void }) => {
+  const segments: React.ReactNode[] = [];
+  let remaining = text;
+  
+  // Markers we care about
+  const markers = ['[PROPERTY:', '[BOOKING_INTENT:', '[PREVIEW_LISTING:', '[ACTION:'];
+  
+  while (remaining.length > 0) {
+      // Find the earliest marker
+      let firstMarkerIndex = -1;
+      let foundMarker = '';
+      
+      for (const m of markers) {
+          const idx = remaining.indexOf(m);
+          if (idx !== -1 && (firstMarkerIndex === -1 || idx < firstMarkerIndex)) {
+              firstMarkerIndex = idx;
+              foundMarker = m;
+          }
+      }
+      
+      if (firstMarkerIndex === -1) {
+          // No more markers, push rest as text
+          segments.push(<MarkdownText key={segments.length} text={remaining} />);
+          break;
+      }
+      
+      // Push text before marker
+      if (firstMarkerIndex > 0) {
+          segments.push(<MarkdownText key={segments.length} text={remaining.substring(0, firstMarkerIndex)} />);
+      }
+      
+      // Extract Tag content with bracket counting
+      let open = 1;
+      let endIndex = -1;
+      const contentStart = firstMarkerIndex + foundMarker.length;
+      
+      for (let i = contentStart; i < remaining.length; i++) {
+          if (remaining[i] === '[') open++;
+          if (remaining[i] === ']') open--;
+          if (open === 0) {
+              endIndex = i;
+              break;
+          }
+      }
+      
+      if (endIndex !== -1) {
+          const jsonStr = remaining.substring(contentStart, endIndex).trim();
+          
+          try {
+              // RENDER COMPONENTS
+              if (foundMarker === '[PROPERTY:') {
+                  // Property ID handling
+                  const id = jsonStr.replace(/['"]/g, ''); 
+                  const prop = properties?.find(p => p.id === id);
+                  if (prop) {
+                      segments.push(<ChatPropertyCard key={segments.length} property={prop} onPreview={onPreview!} />);
+                  }
+              } else if (foundMarker === '[BOOKING_INTENT:') {
+                  const data = JSON.parse(jsonStr);
+                  segments.push(<BookingProposalCard key={segments.length} proposal={data} onBook={onBook} properties={properties} />);
+              } else if (foundMarker === '[PREVIEW_LISTING:') {
+                  const data = JSON.parse(jsonStr);
+                  segments.push(<ListingPreviewCard key={segments.length} previewData={data} onConfirm={onAction!} />);
+              } else if (foundMarker === '[ACTION:') {
+                   // Hidden from UI
+              }
+              
+          } catch (e) {
+               console.warn("Error parsing chat component payload", e);
+               // Fallback: render raw ID for PROPERTY tag if JSON parse failed (legacy support)
+               if (foundMarker === '[PROPERTY:') {
+                   const id = jsonStr;
+                   const prop = properties?.find(p => p.id === id);
+                   if (prop) segments.push(<ChatPropertyCard key={segments.length} property={prop} onPreview={onPreview!} />);
+               }
+          }
+          
+          remaining = remaining.substring(endIndex + 1);
+      } else {
+          // Malformed tag (unbalanced), treat as text to avoid infinite loop
+          segments.push(<MarkdownText key={segments.length} text={remaining.substring(firstMarkerIndex, firstMarkerIndex + foundMarker.length)} />);
+          remaining = remaining.substring(firstMarkerIndex + foundMarker.length);
+      }
+  }
   
   return (
     <div className="text-sm text-gray-800 dark:text-gray-200 space-y-2 leading-relaxed">
-      {parts.map((part, index) => {
-        const propMatch = part.match(/^\[PROPERTY: (.+?)\]$/);
-        if (propMatch && properties && onPreview) {
-          const property = properties.find(p => p.id === propMatch[1]);
-          return property ? <ChatPropertyCard key={index} property={property} onPreview={onPreview} /> : null;
-        }
-        
-        const bookingMatch = part.match(/^\[BOOKING_INTENT: (.+?)\]$/);
-        if (bookingMatch) {
-            try { return <BookingProposalCard key={index} proposal={JSON.parse(bookingMatch[1])} onBook={onBook} properties={properties} />; } 
-            catch (e) { return null; }
-        }
-
-        const actionMatch = part.match(/^\[ACTION: (.+?)\]$/);
-        if (actionMatch) return null; // Hide raw actions from UI
-        
-        if (!part.trim()) return null;
-
-        // Simple Markdown-ish parsing
-        return (
-            <div key={index}>
-                {part.split('\n').map((line, i) => {
-                    if (!line.trim()) return <div key={i} className="h-2" />;
-                    const bolded = line.split(/(\*\*.*?\*\*)/g).map((chunk, j) => 
-                        chunk.startsWith('**') && chunk.endsWith('**') 
-                        ? <strong key={j} className="font-semibold text-gray-900 dark:text-white">{chunk.slice(2, -2)}</strong> 
-                        : chunk
-                    );
-                    return <p key={i} className="mb-1">{bolded}</p>;
-                })}
-            </div>
-        );
-      })}
+      {segments}
     </div>
   );
 };
@@ -337,7 +497,7 @@ export const AIChat: React.FC<AIChatProps> = ({
                                         </div>
                                     )}
                                     <div className={`max-w-[85%] ${msg.role === 'user' ? 'bg-gray-100 dark:bg-gray-800 rounded-2xl px-5 py-3 text-gray-900 dark:text-white' : 'text-gray-900 dark:text-gray-100 pt-1 leading-relaxed'}`}>
-                                        {msg.role === 'user' ? msg.text : <FormattedMessage text={msg.text} properties={properties} onPreview={onPreview} onBook={onBook} />}
+                                        {msg.role === 'user' ? msg.text : <FormattedMessage text={msg.text} properties={properties} onPreview={onPreview} onBook={onBook} onAction={onAction} />}
                                     </div>
                                 </div>
                             ))}
@@ -434,7 +594,7 @@ export const AIChat: React.FC<AIChatProps> = ({
              {messages.map((msg) => (
                 <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[90%] px-3 py-2 rounded-xl text-sm ${msg.role === 'user' ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'}`}>
-                        {msg.role === 'user' ? msg.text : <FormattedMessage text={msg.text} properties={properties} />}
+                        {msg.role === 'user' ? msg.text : <FormattedMessage text={msg.text} properties={properties} onAction={onAction} />}
                     </div>
                 </div>
              ))}

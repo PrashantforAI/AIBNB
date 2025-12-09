@@ -11,7 +11,6 @@ import { ServiceProviderDashboard } from './pages/ServiceProviderDashboard';
 import { HostProfilePage } from './pages/HostProfile';
 import { Messages } from './pages/Messages'; 
 import { AIChat } from './components/AIChat';
-import { HostOnboardingChat } from './components/HostOnboardingChat';
 import { MOCK_PROPERTIES, AI_SYSTEM_INSTRUCTION, AI_GUEST_INSTRUCTION, AI_HOST_BRAIN_INSTRUCTION, AI_SERVICE_INSTRUCTION, MOCK_TASKS, MOCK_HOST_PROFILE } from './constants';
 import { Property, DaySettings, Booking, SearchCriteria, UserRole, ServiceTask, AIAction, HostProfile, PropertyType } from './types';
 import { fetchProperties, savePropertyToDb, updateCalendarDay } from './services/propertyService';
@@ -21,7 +20,6 @@ import { fetchUserProfile, saveUserProfile } from './services/userService';
 import { Loader2, AlertTriangle, User, ShieldCheck, Sun, Moon, Briefcase } from 'lucide-react';
 import { signInAnonymously } from 'firebase/auth';
 import { auth } from './firebaseConfig';
-import { callAICore } from './services/api';
 
 function App() {
   const [activePage, setActivePage] = useState('dashboard');
@@ -29,7 +27,6 @@ function App() {
   const [editingProperty, setEditingProperty] = useState<Property | undefined>(undefined);
   const [previewProperty, setPreviewProperty] = useState<Property | undefined>(undefined);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [isAIOnboardingOpen, setIsAIOnboardingOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [permissionError, setPermissionError] = useState(false);
   
@@ -205,65 +202,14 @@ function App() {
   const handlePreviewProperty = (prop: Property) => { setPreviewProperty(prop); setActivePage('guest-view'); setViewMode('dashboard'); };
   const handleAddNew = () => { setEditingProperty(undefined); setIsEditorOpen(true); };
   
-  // HANDLER: Finish AI Onboarding
-  const handleFinishAIListing = (collectedData: Partial<Property>) => {
-      setIsAIOnboardingOpen(false);
-      setEditingProperty(collectedData as Property); // Pre-fill editor with AI data
-      setIsEditorOpen(true);
-  };
-
   const handleSaveProperty = async (prop: Property) => {
-    // If it's a NEW property (status draft or no ID yet, though ID might be set by frontend logic earlier)
-    // The backend add_property creates a new doc.
-    // Ideally we strictly separate "create" via backend and "update" via frontend or backend.
-    // For this task, I'll route "create" through the new backend function.
-    
-    // Check if it's effectively a new property being published
-    const isNew = !properties.find(p => p.id === prop.id); // Simple check
-
-    if (isNew) {
-        try {
-            setIsLoading(true);
-            // Map to backend schema
-            const payload = {
-                title: prop.title,
-                description: prop.description,
-                location: {
-                    address: prop.address,
-                    city: prop.city,
-                    country: prop.country,
-                    lat: prop.gpsLocation?.lat,
-                    lng: prop.gpsLocation?.lng
-                },
-                pricePerNight: prop.baseWeekdayPrice,
-                maxGuests: prop.maxGuests,
-                amenities: prop.amenities
-            };
-
-            await callAICore('add_property', payload, 'host', currentUserId);
-            
-            // Refresh local list
-            await refreshProperties();
-            setIsEditorOpen(false);
-            setActivePage('listings');
-        } catch (e) {
-            console.error("Failed to add property via backend", e);
-            alert("Backend Error: Could not list property.");
-        } finally {
-            setIsLoading(false);
-        }
-    } else {
-        // Update existing logic (keep as is or move to backend too? Prompt asked for "List a New Property" form specifically)
-        // I'll keep update logic local for now to minimize disruption, as requested specifically for "List a New Property"
-        const newId = prop.id || Date.now().toString();
-        const pToSave = { ...prop, id: newId };
-        if (editingProperty) setProperties(prev => prev.map(p => p.id === newId ? pToSave : p));
-        else setProperties(prev => [...prev, pToSave]); // Fallback if backend fails/skipped
-        
-        try { await savePropertyToDb(pToSave); } catch (e) {}
-        setIsEditorOpen(false);
-        setActivePage('listings');
-    }
+    const newId = prop.id || Date.now().toString();
+    const pToSave = { ...prop, id: newId };
+    if (editingProperty) setProperties(prev => prev.map(p => p.id === newId ? pToSave : p));
+    else setProperties(prev => [...prev, pToSave]);
+    setIsEditorOpen(false);
+    setActivePage('listings');
+    try { await savePropertyToDb(pToSave); } catch (e) {}
   };
 
   const handleUpdateProperty = async (p: Property) => {
@@ -354,20 +300,16 @@ function App() {
       if (action.type === 'APPROVE_BOOKING') {
           let { bookingId } = action.payload;
           
-          // SMART FALLBACK: If ID is fuzzy or missing, find the first pending booking
           if (!bookingId || bookingId === 'derived_from_context' || bookingId === 'mock_id') {
               const pending = userBookings.find(b => b.status === 'pending');
               if (pending) {
                   bookingId = pending.id;
-                  console.log("AI Agent inferred booking ID:", bookingId);
               } else {
-                  console.warn("AI Agent tried to approve but no pending bookings found.");
                   return;
               }
           }
 
           if (bookingId) {
-              // Find booking to get details
               const booking = userBookings.find(b => b.id === bookingId) || { propertyId: '1', startDate: '2025-12-06', endDate: '2025-12-07' } as any; 
               
               if (booking) {
@@ -380,9 +322,45 @@ function App() {
       }
 
       if (action.type === 'ADD_PROPERTY') {
-          const { title, city, basePrice, description, type, tempId, amenities } = action.payload;
+          // Destructure payload with full property support
+          const { 
+              title, 
+              city, 
+              state,
+              pincode,
+              address,
+              location,
+              baseWeekdayPrice,
+              baseWeekendPrice,
+              description, 
+              type, 
+              tempId, 
+              amenities,
+              bedrooms,
+              bathrooms,
+              baseGuests,
+              maxGuests,
+              extraGuestPrice,
+              poolType,
+              poolSize,
+              petFriendly,
+              kitchenAvailable,
+              nonVegAllowed,
+              mealsAvailable,
+              caretakerAvailable,
+              caretakerName,
+              checkInTime,
+              checkOutTime,
+              // Financials & Rules
+              securityDeposit,
+              refundPolicy,
+              cancellationPolicy,
+              smokingPolicy,
+              quietHours,
+              cleaningPolicy,
+              standardOccupancy
+          } = action.payload;
           
-          // Generate ID: Use tempId from AI if available (preferred for chaining), else fallback
           const newId = tempId || `prop_${Date.now()}`;
           
           const newProp: Property = {
@@ -390,37 +368,72 @@ function App() {
               title: title || 'New Property',
               description: description || 'AI Generated Listing. Review details.',
               type: type || PropertyType.VILLA,
-              status: 'draft', // Safety first
-              address: 'Address pending', 
-              location: city || 'Unknown', 
+              status: 'draft', 
+              
+              // Location Details
+              address: address || 'Address pending', 
+              location: location || city || 'Unknown', 
               city: city || 'Unknown', 
-              state: 'Maharashtra', // Default
+              state: state || 'Maharashtra', 
               country: 'India', 
-              pincode: '000000',
+              pincode: pincode || '000000',
               gpsLocation: { lat: 18.75, lng: 73.40 }, // Default Lonavala center
-              bedrooms: 3, 
-              bathrooms: 3, 
-              poolType: 'NA', 
+              
+              // Structure
+              bedrooms: bedrooms || 3, 
+              bathrooms: bathrooms || 3, 
+              baseGuests: baseGuests || 6,
+              maxGuests: maxGuests || 10,
+              
+              // Amenities & Features
+              poolType: poolType || 'NA', 
+              poolSize: poolSize,
               parking: true, 
-              petFriendly: false,
-              kitchenAvailable: true, 
-              nonVegAllowed: true, 
-              mealsAvailable: false,
-              checkInTime: '13:00', 
-              checkOutTime: '11:00',
-              caretakerAvailable: false,
-              baseGuests: 6, 
-              maxGuests: 10,
-              currency: 'INR', 
-              baseWeekdayPrice: basePrice || 10000, 
-              baseWeekendPrice: (basePrice ? basePrice * 1.4 : 14000), 
-              extraGuestPrice: 1000,
+              petFriendly: petFriendly !== undefined ? petFriendly : false,
               amenities: amenities || ['Wifi', 'AC'], 
+              
+              // Food & Staff
+              kitchenAvailable: kitchenAvailable !== undefined ? kitchenAvailable : true, 
+              nonVegAllowed: nonVegAllowed !== undefined ? nonVegAllowed : true, 
+              mealsAvailable: mealsAvailable !== undefined ? mealsAvailable : false,
+              caretakerAvailable: caretakerAvailable !== undefined ? caretakerAvailable : false,
+              caretakerName: caretakerName,
+
+              // Policies & Rules
+              checkInTime: checkInTime || '13:00', 
+              checkOutTime: checkOutTime || '11:00',
+              rules: {
+                  checkInTime: checkInTime || '14:00',
+                  checkOutTime: checkOutTime || '11:00',
+                  standardOccupancy: standardOccupancy || baseGuests || 6,
+                  maxOccupancy: maxGuests || 8,
+                  extraGuestPolicy: 'Chargeable',
+                  chefAvailable: true,
+                  kitchenUsagePolicy: kitchenAvailable ? 'Allowed' : 'Reheating only',
+                  securityDeposit: securityDeposit || 5000,
+                  refundPolicy: refundPolicy || 'Non-refundable',
+                  cancellationPolicy: cancellationPolicy || 'Moderate',
+                  petsAllowed: petFriendly || false,
+                  petDeposit: 5000,
+                  petSanitationFee: 2000,
+                  petPoolPolicy: 'No pets in pool',
+                  quietHours: quietHours || '10:00 PM - 07:00 AM',
+                  smokingPolicy: smokingPolicy || 'Outdoors only',
+                  cleaningPolicy: cleaningPolicy || 'Daily'
+              },
+              
+              // Pricing
+              currency: 'INR', 
+              baseWeekdayPrice: baseWeekdayPrice || 10000, 
+              baseWeekendPrice: baseWeekendPrice || (baseWeekdayPrice ? baseWeekdayPrice * 1.4 : 14000), 
+              extraGuestPrice: extraGuestPrice || 1000,
+              
+              // System
               mealPlans: [], 
               addOns: [], 
               pricingRules: [], 
               calendar: {}, 
-              images: ['https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&q=80&w=1000'], // Placeholder
+              images: ['https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&q=80&w=1000'], 
               reviews: [], 
               occupancyRate: 0, 
               revenueLastMonth: 0,
@@ -430,7 +443,6 @@ function App() {
           try {
               await savePropertyToDb(newProp);
               await refreshProperties();
-              // Auto-navigate to editor for refinement
               handleEditProperty(newProp);
           } catch(e) {
               console.error("Failed to add property via AI", e);
@@ -439,30 +451,21 @@ function App() {
 
       if (action.type === 'UPDATE_PROPERTY') {
           const { propertyId, ...updates } = action.payload;
-          
-          // Find property by ID (or tempId if AI used it recently)
           const propToUpdate = properties.find(p => p.id === propertyId);
-          
           if (propToUpdate) {
-              // Handle special fields
               const updatedProp = { ...propToUpdate, ...updates };
-              
-              // Map AI 'mapLocation' to internal 'gpsLocation'
               if (updates.mapLocation) {
                   updatedProp.gpsLocation = {
                       lat: updates.mapLocation.latitude || updates.mapLocation.lat,
                       lng: updates.mapLocation.longitude || updates.mapLocation.lng
                   };
               }
-
               try {
                   await savePropertyToDb(updatedProp);
                   await refreshProperties();
               } catch(e) {
                   console.error("Failed to update property via AI", e);
               }
-          } else {
-              console.warn(`Property with ID ${propertyId} not found for update.`);
           }
       }
   };
@@ -594,20 +597,9 @@ function App() {
                         isDarkMode={theme === 'dark'}
                         currentRole={UserRole.HOST}
                     >
-                        {isEditorOpen ? (
-                            <PropertyEditor 
-                                initialData={editingProperty} 
-                                onSave={handleSaveProperty} 
-                                onCancel={() => setIsEditorOpen(false)} 
-                            />
-                        ) : isAIOnboardingOpen ? (
-                            <HostOnboardingChat 
-                                onClose={() => setIsAIOnboardingOpen(false)} 
-                                onFinish={handleFinishAIListing} 
-                            />
-                        ) : (
+                        {isEditorOpen ? <PropertyEditor initialData={editingProperty} onSave={handleSaveProperty} onCancel={() => setIsEditorOpen(false)} /> : (
                         <>
-                            {activePage === 'dashboard' && <HostDashboard properties={properties} onNavigate={handleNavigate} onRefresh={refreshProperties} onStartAIListing={() => setIsAIOnboardingOpen(true)} />}
+                            {activePage === 'dashboard' && <HostDashboard properties={properties} onNavigate={handleNavigate} onRefresh={refreshProperties} />}
                             {activePage === 'ai-concierge' && (
                                 <div className="h-full flex flex-col">
                                     <AIChat 

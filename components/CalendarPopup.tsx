@@ -47,8 +47,8 @@ export const CalendarPopup: React.FC<CalendarPopupProps> = ({
     const minDateStr = minDate || todayStr;
 
     // --- Smart Selection Logic ---
-    // If startDate is present, we are selecting Check-Out date.
     // If startDate is NOT present, we are selecting Check-In date.
+    // If startDate is present, we are selecting Check-Out date.
     const isSelectingCheckOut = !!startDate;
 
     let limitDate: string | null = null;
@@ -57,10 +57,9 @@ export const CalendarPopup: React.FC<CalendarPopupProps> = ({
         // This effectively creates a "Wall" that the user cannot drag past.
         // Example: Start 20th. Booked 22nd. 
         // 21st is valid. 22nd is valid (Check-out morning). 23rd is invalid (Enveloped).
-        const start = new Date(startDate);
-        const sortedUnavailable = Array.from(unavailableDates).sort();
+        const sortedUnavailable = (Array.from(unavailableDates) as string[]).sort();
         
-        limitDate = sortedUnavailable.find(dateStr => dateStr >= startDate) || null;
+        limitDate = sortedUnavailable.find((dateStr) => dateStr >= startDate) || null;
     }
 
     const handlePrevMonth = (e: React.MouseEvent) => {

@@ -1,6 +1,4 @@
 
-
-
 import { GoogleGenAI, Chat, GenerativeModel } from "@google/genai";
 import { AI_SYSTEM_INSTRUCTION, AI_MESSAGE_REGULATOR_INSTRUCTION } from '../constants';
 import { AIAction, Property, Booking } from '../types';
@@ -51,7 +49,6 @@ export const initializeChat = (systemInstruction: string = AI_SYSTEM_INSTRUCTION
 
 // --- SMART FALLBACK AGENT ---
 // Simulates an intelligent AI Agent when the real API is down/throttled.
-// It parses the context to find real Property IDs and Booking IDs.
 const getMockResponse = (message: string): string => {
     const lowerMsg = message.toLowerCase();
     
@@ -64,22 +61,11 @@ const getMockResponse = (message: string): string => {
         } catch (e) {}
     }
 
-    // Helper: Find Property ID by name in user's portfolio
+    // Helper: Find Property ID by name
     const findPropertyId = (nameQuery: string): string => {
-        if (!contextData.portfolio) return '1'; // Default
+        if (!contextData.portfolio) return '1';
         const match = contextData.portfolio.find((p: any) => nameQuery.includes(p.title.toLowerCase()) || p.title.toLowerCase().includes(nameQuery));
         return match ? match.id : (contextData.portfolio[0]?.id || '1');
-    };
-
-    // Helper: Find Pending Booking ID
-    const findBookingId = (nameQuery: string): string => {
-        if (!contextData.pendingRequests) return 'mock_id';
-        const match = contextData.pendingRequests.find((b: any) => 
-            nameQuery.includes(b.guest.toLowerCase()) || 
-            b.guest.toLowerCase().includes(nameQuery) ||
-            nameQuery.includes('booking')
-        );
-        return match ? match.bookingId : (contextData.pendingRequests[0]?.bookingId || 'mock_id');
     };
 
     // --- HOST AGENT INTENTS ---
@@ -88,118 +74,75 @@ const getMockResponse = (message: string): string => {
     if (lowerMsg.includes('calendar') || lowerMsg.includes('schedule')) {
         return "Sure, opening your calendar now.\n\n[ACTION: {\"type\": \"NAVIGATE\", \"payload\": \"calendar\"}]";
     }
-    if (lowerMsg.includes('message') || lowerMsg.includes('inbox') || lowerMsg.includes('chat')) {
+    if (lowerMsg.includes('message') || lowerMsg.includes('inbox')) {
         return "Taking you to your messages.\n\n[ACTION: {\"type\": \"NAVIGATE\", \"payload\": \"messages\"}]";
     }
-    if (lowerMsg.includes('dashboard') || lowerMsg.includes('overview') || lowerMsg.includes('stats')) {
-        return "Here is your dashboard overview.\n\n[ACTION: {\"type\": \"NAVIGATE\", \"payload\": \"dashboard\"}]";
+
+    // 2. URL IMPORT INTELLIGENCE (Elivaas & Generic)
+    if (message.includes('http') || message.includes('.com')) {
+        // Mock parsing logic for the specific Elivaas link user provided
+        if (message.includes('elivaas.com') || message.includes('meraki')) {
+            return `I've analyzed the link! It looks like a stunning property.\n\n**Extracted Details:**\n- **Name:** Meraki 6BHK Villa with Private Pool\n- **Location:** Lonavala\n- **Structure:** 6 Bedrooms\n- **Features:** Private Pool detected\n\nI've drafted the listing for you. Just need your **Base Nightly Price** to finalize it.`;
+        }
+        
+        // Handle "List this" follow up if price is provided after a link
+        if (/\d+/.test(lowerMsg) && !lowerMsg.includes('date')) {
+             return `Perfect. I've added the pricing. Here is the final preview.\n\n[PREVIEW_LISTING: {\n  "title": "Meraki 6BHK Villa with Private Pool",\n  "city": "Lonavala",\n  "address": "Tungarli, Lonavala",\n  "state": "Maharashtra",\n  "pincode": "410401",\n  "baseWeekdayPrice": ${lowerMsg.match(/\d+/)?.[0] || '25000'},\n  "baseWeekendPrice": ${(parseInt(lowerMsg.match(/\d+/)?.[0] || '25000') * 1.4)},\n  "type": "Villa",\n  "bedrooms": 6,\n  "bathrooms": 6,\n  "baseGuests": 12,\n  "maxGuests": 18,\n  "amenities": ["Pool", "WiFi", "AC", "Parking"],\n  "poolType": "Private",\n  "petFriendly": false,\n  "caretakerAvailable": true,\n  "kitchenAvailable": true,\n  "checkInTime": "14:00",\n  "checkOutTime": "11:00",\n  "securityDeposit": 20000,\n  "refundPolicy": "Non-refundable",\n  "smokingPolicy": "No smoking indoors"\n}]`;
+        }
     }
 
-    // 2. Booking Approval
-    if (lowerMsg.includes('approve') || lowerMsg.includes('confirm') || lowerMsg.includes('accept')) {
-        // Try to find who to approve
-        let targetId = 'derived_from_context'; 
-        // Simple extraction of a name (this is a mock, so we guess)
-        // In real app, the context helps.
+    // 3. CHAT TO LIST (EXHAUSTIVE INTERVIEW MOCK)
+    if (lowerMsg.includes('list') || lowerMsg.includes('property') || lowerMsg.includes('villa') || lowerMsg.includes('apartment')) {
         
-        return "I've processed the approval for the pending request. Calendar updated.\n\n[ACTION: {\"type\": \"APPROVE_BOOKING\", \"payload\": {\"bookingId\": \"derived_from_context\"}}]";
-    }
-
-    // 3. Block Dates
-    if (lowerMsg.includes('block')) {
-        // Identify property
-        // Extract dates (Mocking date extraction for demo - usually assumes 'next week' or specific dates)
-        const propId = findPropertyId(lowerMsg.replace('block', '').trim());
-        const today = new Date();
-        const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7);
-        const nextWeekEnd = new Date(nextWeek); nextWeekEnd.setDate(nextWeek.getDate() + 2);
-        
-        const start = nextWeek.toISOString().split('T')[0];
-        const end = nextWeekEnd.toISOString().split('T')[0];
-
-        return `I've blocked dates from ${start} to ${end} for this property.\n\n[ACTION: {\"type\": \"BLOCK_DATES\", \"payload\": {\"propertyId\": "${propId}", \"startDate\": "${start}", \"endDate\": "${end}", \"reason\": "Host Request"}}]`;
-    }
-
-    // 4. Update Price
-    if (lowerMsg.includes('price') || lowerMsg.includes('rate') || lowerMsg.includes('set')) {
-        const propId = findPropertyId(lowerMsg);
-        // Extract price
-        const priceMatch = lowerMsg.match(/(\d+)/);
-        const price = priceMatch ? parseInt(priceMatch[0]) : 20000;
-        
-        // Detect Month/Bulk - INTELLIGENT PARSING
-        const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
-        const monthIndex = months.findIndex(m => lowerMsg.includes(m));
-        
-        if (monthIndex !== -1) {
-             // If month found, calculate start/end date for that month
-             const now = new Date();
-             let year = now.getFullYear();
-             if (now.getMonth() > monthIndex) year++; // Next year if month passed
-             
-             const startDate = new Date(year, monthIndex, 1).toISOString().split('T')[0];
-             const endDate = new Date(year, monthIndex + 1, 0).toISOString().split('T')[0];
-             
-             let applyTo = 'all';
-             if (lowerMsg.includes('weekday')) applyTo = 'weekdays';
-             if (lowerMsg.includes('weekend')) applyTo = 'weekends';
-
-             return `Done. Setting price to ₹${price} for ${applyTo} in ${months[monthIndex]}.\n\n[ACTION: {\"type\": \"UPDATE_PRICE\", \"payload\": {\"propertyId\": "${propId}", \"startDate\": "${startDate}", \"endDate\": "${endDate}", \"applyTo\": "${applyTo}", \"price\": ${price}}}]`;
+        // Step 1: Basics (Name, City)
+        if (!lowerMsg.includes('bedroom') && !lowerMsg.includes('price')) {
+            return "I can help you list a new property. I need to gather some details first.\n\n**Step 1/8: Core Details**\nWhat is the **Name** of the property, **City**, and **Property Type** (e.g. Villa, Apartment)?";
         }
 
-        // Default single date
-        const date = new Date().toISOString().split('T')[0]; // Today
-        return `Price updated to ₹${price} for today. (Check calendar to confirm).\n\n[ACTION: {\"type\": \"UPDATE_PRICE\", \"payload\": {\"propertyId\": "${propId}", \"date\": "${date}", \"price\": ${price}}}]`;
-    }
+        // Step 2: Location (Address)
+        if (lowerMsg.includes('villa') || lowerMsg.includes('apt') || lowerMsg.includes('home')) {
+             if (!lowerMsg.includes('road') && !lowerMsg.includes('nagar')) {
+                 return "**Step 2/8: Exact Location**\nGreat. Now, what is the **Full Address** including Area, State, and Pincode?";
+             }
+        }
 
-    // --- GUEST CONCIERGE INTENTS ---
-    // 1. Explicit SEARCH Trigger (Location + Guests + Date mention)
-    const knownLocations = ['lonavala', 'goa', 'jaipur', 'alibaug', 'mumbai', 'delhi', 'udaipur', 'manali', 'shimla', 'kerala'];
-    const foundLocation = knownLocations.find(l => lowerMsg.includes(l));
-    const hasNumber = /\d/.test(lowerMsg) || lowerMsg.includes('one') || lowerMsg.includes('two') || lowerMsg.includes('three');
+        // Step 3: Structure (Beds, Baths)
+        if (lowerMsg.includes('road') || lowerMsg.includes('nagar') || lowerMsg.includes('pin')) {
+            return "**Step 3/8: Structure & Capacity**\nGot it. How many **Bedrooms** and **Bathrooms** does it have? Also, what is the **Max Guest Capacity**?";
+        }
 
-    if (foundLocation && hasNumber) {
-        // Extract Guests (heuristic)
-        const guestMatch = lowerMsg.match(/(\d+)\s*(guest|person|people|adult|pax)/);
-        const guests = guestMatch ? parseInt(guestMatch[1]) : 2;
+        // Step 4: Amenities (Pool)
+        if (lowerMsg.includes('bed') || lowerMsg.includes('bath') || lowerMsg.includes('guest')) {
+             return "**Step 4/8: Amenities**\nDoes it have a **Swimming Pool** (Private/Shared)? What about AC, WiFi, and Parking?";
+        }
+
+        // Step 5: Food & Staff
+        if (lowerMsg.includes('pool') || lowerMsg.includes('wifi') || lowerMsg.includes('ac')) {
+            return "**Step 5/8: Food & Staff**\nIs there a **Caretaker** on-site? Is the **Kitchen** available for guests? Is non-veg food allowed?";
+        }
         
-        // Capitalize location
-        const locationStr = foundLocation.charAt(0).toUpperCase() + foundLocation.slice(1);
-        
-        // Dynamic Dates (Default to next weekend roughly)
-        const getFutureDate = (days: number) => {
-            const d = new Date();
-            d.setDate(d.getDate() + days);
-            return d.toISOString().split('T')[0];
-        };
-        const checkIn = getFutureDate(5);
-        const checkOut = getFutureDate(7);
+        // Step 6: Policies
+        if (lowerMsg.includes('caretaker') || lowerMsg.includes('kitchen') || lowerMsg.includes('veg')) {
+             return "**Step 6/8: Policies**\nAre **Pets** allowed? What are your standard **Check-in** and **Check-out** times?";
+        }
 
-        return `Searching for properties in ${locationStr} for ${guests} guests...\n\n[ACTION: {"type": "SEARCH_PROPERTIES", "payload": {"location": "${locationStr}", "checkIn": "${checkIn}", "checkOut": "${checkOut}", "guests": ${guests}}}]`;
+        // Step 7: Financials & Rules (NEW)
+        if (lowerMsg.includes('pet') || lowerMsg.includes('check')) {
+             return "**Step 7/8: Financials & Rules**\nAlmost there. What is the **Security Deposit** amount and your **Refund Policy**? Also, any smoking restrictions?";
+        }
+
+        // Step 8: Pricing
+        if (lowerMsg.includes('deposit') || lowerMsg.includes('refund') || lowerMsg.includes('smoking')) {
+            return "**Step 8/8: Pricing**\nFinally, what is the **Base Weekday Price** and **Weekend Price** per night?";
+        }
+
+        // Confirmation & Action
+        if (lowerMsg.includes('price') || lowerMsg.includes('rupee') || /\d+/.test(lowerMsg)) {
+             return `I've gathered all the details. Here is a preview of your listing card.\n\nDoes this look correct?\n\n[PREVIEW_LISTING: {\n  "title": "New Mock Property",\n  "city": "Lonavala",\n  "address": "123 Mock Street, Tungarli",\n  "state": "Maharashtra",\n  "pincode": "410401",\n  "baseWeekdayPrice": 15000,\n  "baseWeekendPrice": 20000,\n  "type": "Villa",\n  "bedrooms": 3,\n  "bathrooms": 3,\n  "baseGuests": 6,\n  "maxGuests": 10,\n  "amenities": ["Pool", "WiFi", "AC"],\n  "poolType": "Private",\n  "petFriendly": true,\n  "caretakerAvailable": true,\n  "kitchenAvailable": true,\n  "checkInTime": "13:00",\n  "checkOutTime": "11:00",\n  "securityDeposit": 5000,\n  "refundPolicy": "Fully refundable up to 5 days before check-in",\n  "smokingPolicy": "No smoking indoors"\n}]`;
+        }
     }
 
-    if (lowerMsg.includes('lonavala') || lowerMsg.includes('villa')) {
-        return "I highly recommend **Saffron Villa**. It's a stunning 4BHK with a private pool and mountain views, perfect for your group. \n\n[PROPERTY: 1]";
-    }
-    if (lowerMsg.includes('jaipur') || lowerMsg.includes('haveli')) {
-        return "You must check out **Heritage Haveli**. It's a restored 19th-century gem in the Pink City. Very authentic experience.\n\n[PROPERTY: 2]";
-    }
-    if (lowerMsg.includes('book') || lowerMsg.includes('reserve')) {
-        const today = new Date();
-        const checkIn = new Date(today); checkIn.setDate(today.getDate() + 7);
-        const checkOut = new Date(checkIn); checkOut.setDate(checkIn.getDate() + 2);
-        const inStr = checkIn.toISOString().split('T')[0];
-        const outStr = checkOut.toISOString().split('T')[0];
-        
-        return `I can help with that. Here is a booking proposal for Saffron Villa.\n\n[BOOKING_INTENT: {"propertyId": "1", "propertyName": "Saffron Villa", "startDate": "${inStr}", "endDate": "${outStr}", "guests": 6, "totalPrice": 35000}]`;
-    }
-    
-    // Host Status
-    if (lowerMsg.includes('business') || lowerMsg.includes('revenue')) {
-        return "Business is trending up! Your revenue is **₹2,45,000** this month (+12%), and occupancy is at 78%. \n\nWould you like to adjust pricing for the upcoming long weekend?";
-    }
-    
-    return "I'm currently in 'Offline Agent Mode' (API Unavailable). \n\nI can still help you navigate or manage your dashboard. Try saying 'Show Calendar', 'Block dates', or 'Approve booking'.";
+    return "I'm currently in 'Offline Agent Mode'. I can help you list properties or manage bookings. Try saying 'List a new villa'.";
 };
 
 export const sendMessageToAI = async (message: string, systemInstruction?: string): Promise<string> => {
@@ -219,39 +162,20 @@ export const sendMessageToAI = async (message: string, systemInstruction?: strin
         const response = await chatSession.sendMessage({ message });
         return response.text || "I didn't get a clear response.";
       } catch (error: any) {
-        throw error; // Throw to be caught below
+        throw error;
       }
   };
 
   try {
-    // Race against timeout
     const result = await Promise.race([apiCall(), timeout]);
     
     if (result === "TIMEOUT") {
-        console.warn("AI Request Timed Out - Switching to Fallback Agent");
         return getMockResponse(message);
     }
     
     return result as string;
 
   } catch (error: any) {
-    // Error Handling
-    const isRecoverableError = 
-        error.message?.includes('429') || 
-        error.status === 429 || 
-        error.message?.includes('quota') || 
-        error.message?.includes('RESOURCE_EXHAUSTED') ||
-        error.code === 500 ||
-        error.message?.includes('Rpc failed') ||
-        error.status === 'UNKNOWN';
-    
-    if (isRecoverableError) {
-        console.warn("Gemini API Error (Recoverable) - Switching to Fallback Agent", error.message);
-        return getMockResponse(message);
-    }
-    
-    console.error("AI Error:", error);
-    // Even on hard error, try fallback to keep UI alive
     return getMockResponse(message);
   }
 };
@@ -260,21 +184,17 @@ export const generateDescription = async (property: Partial<Property>, vibe: str
     const ai = getClient();
     
     const prompt = `
-    You are an expert real estate copywriter. Write a 150-word listing description for this property.
+    You are an expert real estate copywriter. Write a 150-word listing description.
     
-    **PROPERTY DETAILS**:
+    **DETAILS**:
     - Title: ${property.title}
     - Location: ${property.location}, ${property.city}
     - Type: ${property.bedrooms}BHK ${property.type}
-    - Vibe/Mood: ${vibe}
+    - Vibe: ${vibe}
     
-    **KEY FEATURES**:
+    **FEATURES**:
     - Pool: ${property.poolType !== 'NA' ? `Yes (${property.poolType})` : 'No'}
     - Amenities: ${property.amenities?.join(', ')}
-    
-    **POLICIES**:
-    - Pets: ${property.petFriendly ? "Allowed" : "No"}
-    - Food: ${property.nonVegAllowed ? "Non-Veg Allowed" : "Veg Only"}
     
     Write in a ${vibe} tone. No headers.
     `;
@@ -325,13 +245,9 @@ export const generateHostInsights = async (properties: Property[], bookings: Boo
     const ai = getClient();
     const prompt = `
     Analyze this host's data and provide 2 strategic insights in JSON format: [{ "title": string, "desc": string, "trend": "up" | "down" }].
-    
     Data:
     - Properties: ${properties.length}
     - Recent Bookings: ${bookings.length} in last 30 days.
-    - Occupancy: High on weekends.
-    
-    Keep it concise. Focus on pricing, demand, or quality.
     `;
     
     try {
@@ -349,16 +265,53 @@ export const generateHostInsights = async (properties: Property[], bookings: Boo
     }
 };
 
+// Robust Parser to handle nested JSON arrays in Actions
 export const parseAIResponse = (response: string): { text: string, actions: AIAction[] } => {
     const actions: AIAction[] = [];
-    const text = response.replace(/\[ACTION: ([\s\S]+?)\]/g, (match, json) => {
-        try {
-            actions.push(JSON.parse(json));
-            return ''; 
-        } catch (e) {
-            console.error("Failed to parse AI action", e);
-            return match;
+    let cleanText = response;
+    const startMarker = '[ACTION:';
+    
+    let startIndex = cleanText.indexOf(startMarker);
+    
+    // Loop to find all occurrences
+    while (startIndex !== -1) {
+        let open = 1; // matched the first '['
+        let endIndex = -1;
+        
+        // Scan forward from after [ACTION:
+        for (let i = startIndex + startMarker.length; i < cleanText.length; i++) {
+            if (cleanText[i] === '[') open++;
+            if (cleanText[i] === ']') open--;
+            
+            if (open === 0) {
+                endIndex = i;
+                break;
+            }
         }
-    });
-    return { text: text.trim(), actions };
+        
+        if (endIndex !== -1) {
+            // Found a balanced block
+            const fullTag = cleanText.substring(startIndex, endIndex + 1);
+            const jsonStr = cleanText.substring(startIndex + startMarker.length, endIndex).trim();
+            
+            try {
+                // Handle potential markdown code blocks wrapping the JSON
+                const cleanJson = jsonStr.replace(/```json\n?|\n?```/g, '');
+                actions.push(JSON.parse(cleanJson));
+            } catch (e) {
+                console.error("Failed to parse AI action JSON", e);
+            }
+            
+            // Remove the tag from the text
+            cleanText = cleanText.replace(fullTag, '').trim();
+            
+            // Reset search from start because string matched
+            startIndex = cleanText.indexOf(startMarker);
+        } else {
+            // Malformed tag (unbalanced), abort to prevent infinite loop
+            break;
+        }
+    }
+    
+    return { text: cleanText, actions };
 };

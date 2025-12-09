@@ -51,10 +51,22 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
 
   const dates = getDaysArray(checkIn, checkOut);
   const totalNights = dates.length;
+  
+  // Calculate Base Total respecting Dynamic Calendar Prices
   const baseTotal = dates.reduce((acc, date) => {
+      const dateStr = date.toISOString().split('T')[0];
+      const customPrice = property.calendar?.[dateStr]?.price;
+      
+      if (customPrice !== undefined) {
+          return acc + customPrice;
+      }
+
       const isWeekend = date.getDay() === 0 || date.getDay() === 5 || date.getDay() === 6;
       return acc + (isWeekend ? property.baseWeekendPrice || 0 : property.baseWeekdayPrice || 0);
   }, 0);
+
+  const avgNightlyPrice = totalNights > 0 ? Math.round(baseTotal / totalNights) : (property.baseWeekdayPrice || 0);
+
   const extraGuestFee = (guests > property.baseGuests) ? (guests - property.baseGuests) * (property.extraGuestPrice || 0) * totalNights : 0;
   const serviceFee = Math.round((baseTotal + extraGuestFee) * 0.08); 
   const taxes = Math.round((baseTotal + extraGuestFee + serviceFee) * 0.18); 
@@ -434,7 +446,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                     {totalNights > 0 && (
                         <div className="mt-6 space-y-3 bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
                             <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
-                                <span className="underline decoration-gray-300 dark:decoration-gray-600">₹{property.baseWeekdayPrice} x {totalNights} nights</span>
+                                <span className="underline decoration-gray-300 dark:decoration-gray-600">₹{avgNightlyPrice.toLocaleString()} x {totalNights} nights</span>
                                 <span>₹{baseTotal?.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
@@ -550,7 +562,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
 
                         <div className="space-y-3">
                             <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
-                                <span>₹{property.baseWeekdayPrice} x {totalNights} nights</span>
+                                <span>₹{avgNightlyPrice.toLocaleString()} x {totalNights} nights</span>
                                 <span>₹{baseTotal?.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between text-gray-600 dark:text-gray-300 text-sm">
