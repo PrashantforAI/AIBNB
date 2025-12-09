@@ -1,6 +1,7 @@
 
+
 import React, { useEffect, useRef, useState } from 'react';
-import { MapPin, Search, Loader2, Navigation, Link as LinkIcon, Info } from 'lucide-react';
+import { MapPin, Search, Loader2, Navigation, Link as LinkIcon, Info, X } from 'lucide-react';
 
 // Declare Leaflet global type from CDN
 declare const L: any;
@@ -19,7 +20,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ lat, lng, onChan
     const markerRef = useRef<any>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
-    const [urlMode, setUrlMode] = useState(false);
+    const [mode, setMode] = useState<'search' | 'paste'>('search');
 
     // Initialize Map
     useEffect(() => {
@@ -34,14 +35,17 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ lat, lng, onChan
         const mapOptions = {
             scrollWheelZoom: !readOnly, // Disable scroll zoom in read-only to prevent page scroll hijacking
             dragging: true, // Always allow panning
-            zoomControl: true // Always show zoom buttons (requested feature)
+            zoomControl: false // We will add it manually for better position
         };
 
         const map = L.map(mapContainerRef.current, mapOptions).setView([initialLat, initialLng], zoom);
         
-        // CartoDB Voyager tiles (clean, modern look)
+        // Add Zoom Control to bottom-right
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        // CartoDB Voyager tiles (Cleaner, "Apple Maps" style)
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
             subdomains: 'abcd',
             maxZoom: 20
         }).addTo(map);
@@ -64,6 +68,12 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ lat, lng, onChan
                 const pos = e.target.getLatLng();
                 await updateAddressFromCoords(pos.lat, pos.lng);
             });
+            
+            // Allow clicking map to move marker
+            map.on('click', async function(e: any) {
+                marker.setLatLng(e.latlng);
+                await updateAddressFromCoords(e.latlng.lat, e.latlng.lng);
+            });
         }
 
         markerRef.current = marker;
@@ -76,7 +86,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ lat, lng, onChan
         };
     }, []);
 
-    // Update marker when props change
+    // Update marker when props change (External updates)
     useEffect(() => {
         if (markerRef.current && mapRef.current && lat && lng) {
             const currentPos = markerRef.current.getLatLng();
@@ -89,12 +99,13 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ lat, lng, onChan
     }, [lat, lng]);
 
     const updateAddressFromCoords = async (latitude: number, longitude: number) => {
+        onChange(latitude, longitude); // Immediate coordinate update
         try {
             const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
             const data = await res.json();
             onChange(latitude, longitude, data.address);
         } catch {
-            onChange(latitude, longitude);
+            // Address fetch failed, but coordinates are set
         }
     };
 
@@ -121,8 +132,8 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ lat, lng, onChan
 
         setIsSearching(true);
 
-        // 1. Try to parse as URL first
-        if (searchQuery.includes('http') || searchQuery.includes('google.com/maps') || searchQuery.includes('maps.google')) {
+        // 1. Try to parse as URL first (if in paste mode OR if input looks like a URL)
+        if (mode === 'paste' || searchQuery.includes('http') || searchQuery.includes('google.com') || searchQuery.includes('maps')) {
             const coords = extractCoordsFromUrl(searchQuery);
             if (coords) {
                 if (mapRef.current && markerRef.current) {
@@ -130,90 +141,105 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ lat, lng, onChan
                     mapRef.current.setView([coords.lat, coords.lng], 16);
                     await updateAddressFromCoords(coords.lat, coords.lng);
                     setIsSearching(false);
+                    setSearchQuery('');
                     return;
                 }
             } else if (searchQuery.includes('goo.gl') || searchQuery.includes('maps.app.goo.gl')) {
-                alert("Short links (goo.gl) are not supported directly. Please click the link, let it open in your browser, then copy the full URL from the address bar.");
+                alert("Short links (goo.gl) are not supported directly due to browser security. Please click the link, let it open in your browser, then copy the FULL URL from the address bar.");
                 setIsSearching(false);
                 return;
             }
         }
 
         // 2. Fallback to Text Search (Nominatim)
-        try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
-            const results = await response.json();
-            
-            if (results && results.length > 0) {
-                const first = results[0];
-                const newLat = parseFloat(first.lat);
-                const newLng = parseFloat(first.lon);
+        if (mode === 'search') {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
+                const results = await response.json();
                 
-                onChange(newLat, newLng, first.address); // Propagate up
-                
-                if (mapRef.current && markerRef.current) {
-                    markerRef.current.setLatLng([newLat, newLng]);
-                    mapRef.current.setView([newLat, newLng], 14);
+                if (results && results.length > 0) {
+                    const first = results[0];
+                    const newLat = parseFloat(first.lat);
+                    const newLng = parseFloat(first.lon);
+                    
+                    if (mapRef.current && markerRef.current) {
+                        markerRef.current.setLatLng([newLat, newLng]);
+                        mapRef.current.setView([newLat, newLng], 14);
+                        // Pass full address details up
+                        onChange(newLat, newLng, first.address);
+                    }
+                } else {
+                    alert("Location not found. Try entering a City or pasting a Google Maps URL.");
                 }
-            } else {
-                alert("Location not found. Try pasting a Google Maps URL.");
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setIsSearching(false);
             }
-        } catch (err) {
-            console.error(err);
-        } finally {
+        } else {
             setIsSearching(false);
         }
     };
 
     return (
-        <div className={`relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 ${className}`}>
+        <div className={`relative rounded-3xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 ${className}`}>
             
-            {/* Search Bar Overlay - Hide in Read Only */}
+            {/* Floating Command Palette (Host View Only) */}
             {!readOnly && (
-                <div className="absolute top-4 left-4 right-4 z-[500] flex flex-col gap-2">
-                    <div className="flex gap-2">
-                        <form onSubmit={handleSearchOrLink} className="flex-1 relative shadow-lg rounded-xl">
-                            <input 
-                                type="text" 
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder={urlMode ? "Paste Google Maps full URL..." : "Search city or paste Maps link"} 
-                                className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none text-gray-900 dark:text-white"
-                            />
-                            {urlMode ? (
-                                <LinkIcon className="absolute left-3 top-3 w-4 h-4 text-brand-500" />
-                            ) : (
-                                <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                            )}
-                        </form>
-                        <button 
-                            onClick={() => handleSearchOrLink()}
-                            disabled={isSearching}
-                            className="bg-brand-600 text-white p-3 rounded-xl shadow-lg hover:bg-brand-700 transition-colors disabled:opacity-50"
-                            title="Search"
-                        >
-                            {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Navigation className="w-5 h-5" />}
-                        </button>
-                    </div>
-                    {/* Mode Toggle / Hint */}
-                    <div className="flex justify-end">
-                        <button 
-                            onClick={() => { setUrlMode(!urlMode); setSearchQuery(''); }}
-                            className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 bg-white/80 dark:bg-black/50 backdrop-blur px-2 py-1 rounded-md hover:text-brand-600 dark:hover:text-brand-400 transition-colors flex items-center gap-1"
-                        >
-                            {urlMode ? "Switch to Search" : "Switch to Paste Link"}
-                        </button>
+                <div className="absolute top-4 left-4 right-4 z-[500] max-w-md mx-auto">
+                    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden transition-all">
+                        {/* Tab Switcher */}
+                        <div className="flex border-b border-gray-100 dark:border-gray-800">
+                            <button 
+                                onClick={() => setMode('search')}
+                                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${mode === 'search' ? 'bg-gray-50 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                            >
+                                Search City
+                            </button>
+                            <div className="w-px bg-gray-100 dark:bg-gray-800"></div>
+                            <button 
+                                onClick={() => setMode('paste')}
+                                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${mode === 'paste' ? 'bg-gray-50 dark:bg-gray-800 text-brand-600 dark:text-brand-400' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                            >
+                                Paste Maps Link
+                            </button>
+                        </div>
+
+                        {/* Input Area */}
+                        <div className="p-2">
+                            <form onSubmit={handleSearchOrLink} className="flex gap-2 relative">
+                                <div className="absolute left-3 top-3 text-gray-400 pointer-events-none">
+                                    {mode === 'search' ? <Search className="w-4 h-4" /> : <LinkIcon className="w-4 h-4" />}
+                                </div>
+                                <input 
+                                    type="text" 
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder={mode === 'search' ? "Enter city, area or landmark..." : "Paste full Google Maps URL here..."} 
+                                    className="w-full pl-9 pr-2 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none text-gray-900 dark:text-white placeholder-gray-400"
+                                />
+                                <button 
+                                    onClick={() => handleSearchOrLink()}
+                                    disabled={isSearching || !searchQuery.trim()}
+                                    className="bg-black dark:bg-white text-white dark:text-black p-2.5 rounded-xl shadow-md hover:opacity-80 transition-opacity disabled:opacity-50"
+                                >
+                                    {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             )}
 
             <div ref={mapContainerRef} className="w-full h-full min-h-[300px] z-10" />
             
+            {/* Host Hint */}
             {!readOnly && (
-                <div className="absolute bottom-4 left-4 right-4 bg-white/90 dark:bg-black/80 backdrop-blur p-3 rounded-xl border border-gray-200 dark:border-gray-700 z-[500] text-xs text-center shadow-lg flex items-center justify-center gap-2">
-                    <Info className="w-3 h-3 text-brand-500" />
-                    <span className="font-bold text-gray-700 dark:text-gray-300">Tip:</span> 
-                    <span className="text-gray-600 dark:text-gray-400">Paste a full Google Maps link to auto-pin exact location.</span>
+                <div className="absolute bottom-4 left-4 right-4 z-[500] pointer-events-none flex justify-center">
+                    <div className="bg-white/90 dark:bg-black/80 backdrop-blur px-4 py-2 rounded-full border border-gray-200 dark:border-gray-700 shadow-lg flex items-center gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-brand-500 animate-bounce" />
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Drag map or marker to pinpoint exact entrance</span>
+                    </div>
                 </div>
             )}
         </div>

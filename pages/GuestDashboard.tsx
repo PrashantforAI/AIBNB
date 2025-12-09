@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Property, Booking, SearchCriteria, AIAction, UserRole, HostProfile } from '../types';
 import { Compass, Calendar, Heart, Search, Sparkles, MessageSquare, Home, Waves, Crown, Tractor, Mountain, ArrowRight, Star, MapPin, Menu, LogOut, User, Sun, Moon, RefreshCw } from 'lucide-react';
@@ -25,6 +24,7 @@ interface GuestDashboardProps {
   onToggleTheme?: () => void;
   onSwitchRole?: () => void;
   isDarkMode?: boolean;
+  initialTab?: 'explore' | 'chat' | 'trips' | 'messages' | 'wishlist' | 'profile';
 }
 
 export const GuestDashboard: React.FC<GuestDashboardProps> = ({ 
@@ -40,13 +40,21 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
     onUpdateProfile,
     onToggleTheme,
     onSwitchRole,
-    isDarkMode
+    isDarkMode,
+    initialTab = 'explore'
 }) => {
-  const [activeTab, setActiveTab] = useState<'explore' | 'chat' | 'trips' | 'messages' | 'wishlist' | 'profile'>('explore');
+  const [activeTab, setActiveTab] = useState<'explore' | 'chat' | 'trips' | 'messages' | 'wishlist' | 'profile'>(initialTab);
   const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
   const [activeCategory, setActiveCategory] = useState('all');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Sync initial tab from props
+  useEffect(() => {
+      if (initialTab) {
+          setActiveTab(initialTab);
+      }
+  }, [initialTab]);
 
   useEffect(() => {
     if (!guestProfile?.id) return;
@@ -57,24 +65,29 @@ export const GuestDashboard: React.FC<GuestDashboardProps> = ({
     return () => unsubscribe();
   }, [guestProfile?.id]);
 
-  const filteredProperties = properties.filter(p => {
-    const searchLoc = searchCriteria.location.toLowerCase();
-    const locMatch = !searchLoc || 
-                     p.city.toLowerCase().includes(searchLoc) || 
-                     p.location.toLowerCase().includes(searchLoc) ||
-                     p.title.toLowerCase().includes(searchLoc);
-    
-    const totalGuests = searchCriteria.adults + searchCriteria.children;
-    const capacityMatch = p.maxGuests >= totalGuests;
-    const dateMatch = isDateRangeAvailable(p, searchCriteria.checkIn, searchCriteria.checkOut);
+  // Filter properties: must be ACTIVE to be seen by guests
+  const filteredProperties = properties
+    .filter(p => p.status === 'active')
+    .filter(p => {
+        const searchLoc = searchCriteria.location.toLowerCase();
+        // Safe access to property fields
+        const cityMatch = p.city?.toLowerCase().includes(searchLoc) ?? false;
+        const locMatch = p.location?.toLowerCase().includes(searchLoc) ?? false;
+        const titleMatch = p.title?.toLowerCase().includes(searchLoc) ?? false;
+        
+        const matchesLocation = !searchLoc || cityMatch || locMatch || titleMatch;
+        
+        const totalGuests = searchCriteria.adults + searchCriteria.children;
+        const capacityMatch = (p.maxGuests || 0) >= totalGuests;
+        const dateMatch = isDateRangeAvailable(p, searchCriteria.checkIn, searchCriteria.checkOut);
 
-    const categoryMatch = activeCategory === 'all' || 
-        (activeCategory === 'pools' && p.amenities.includes('Pool')) ||
-        (activeCategory === 'luxe' && p.baseWeekdayPrice > 12000) ||
-        (activeCategory === 'farms' && p.type === 'Farmhouse') ||
-        (activeCategory === 'views' && p.description.toLowerCase().includes('view'));
+        const categoryMatch = activeCategory === 'all' || 
+            (activeCategory === 'pools' && p.amenities?.includes('Pool')) ||
+            (activeCategory === 'luxe' && (p.baseWeekdayPrice || 0) > 12000) ||
+            (activeCategory === 'farms' && p.type === 'Farmhouse') ||
+            (activeCategory === 'views' && (p.description?.toLowerCase().includes('view') ?? false));
 
-    return locMatch && capacityMatch && dateMatch && categoryMatch;
+        return matchesLocation && capacityMatch && dateMatch && categoryMatch;
   });
 
   const updateSearch = (field: keyof SearchCriteria, value: any) => {

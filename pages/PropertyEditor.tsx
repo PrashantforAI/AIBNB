@@ -1,14 +1,14 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Property, PropertyType, MealPlan } from '../types';
 import { generateDescription, suggestPricing } from '../services/aiService';
 import { 
   Wand2, Save, Plus, Trash2, IndianRupee, MapPin, 
   Home, Users, Clock, Camera, ChevronRight, ChevronLeft, Check,
   Utensils, BedDouble, Bath, Car, Dog, Wifi, UserCheck, Droplets, Shield, FileText, Sparkles, Coffee, PartyPopper, Briefcase, Heart, Palmtree, ChefHat,
-  Rocket
+  Rocket, AlertTriangle, AlertCircle, Search, X
 } from 'lucide-react';
-import { AMENITIES_LIST } from '../constants';
+import { AMENITY_CATEGORIES, MASTER_AMENITIES_LIST, getAmenityIcon } from '../constants';
 import { LocationPicker } from '../components/LocationPicker';
 
 interface PropertyEditorProps {
@@ -23,15 +23,6 @@ const STEPS = [
   { id: 3, label: 'Logistics & Rules', icon: <FileText className="w-4 h-4"/> },
   { id: 4, label: 'Guests & Pricing', icon: <IndianRupee className="w-4 h-4"/> },
   { id: 5, label: 'Photos & Content', icon: <Camera className="w-4 h-4"/> },
-];
-
-const VIBES = [
-    { id: 'Peaceful', icon: Coffee, label: 'Peaceful' },
-    { id: 'Luxury', icon: Sparkles, label: 'Luxury' },
-    { id: 'Party', icon: PartyPopper, label: 'Party Ready' },
-    { id: 'Work', icon: Briefcase, label: 'Workcation' },
-    { id: 'Romantic', icon: Heart, label: 'Romantic' },
-    { id: 'Nature', icon: Palmtree, label: 'Nature' },
 ];
 
 // Helper to compress images
@@ -136,15 +127,7 @@ const ToggleCard = ({ checked, onChange, title, icon: Icon }: { checked: boolean
   </div>
 );
 
-export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onSave, onCancel }) => {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [customAmenity, setCustomAmenity] = useState('');
-  const [propertyVibe, setPropertyVibe] = useState('Peaceful');
-  const [showPublishConfirmation, setShowPublishConfirmation] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [formData, setFormData] = useState<Partial<Property>>(initialData || {
+const DEFAULT_PROPERTY_DATA: Partial<Property> = {
     title: '',
     type: PropertyType.VILLA,
     status: 'draft',
@@ -168,10 +151,40 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
         petPoolPolicy: 'Strictly prohibited',
         quietHours: '10:00 PM - 07:00 AM', smokingPolicy: 'Outdoors only', cleaningPolicy: 'Daily mandatory'
     }
-  });
+};
+
+export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onSave, onCancel }) => {
+  const [currentStep, setCurrentStep] = useState(1);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [amenitySearch, setAmenitySearch] = useState('');
+  const [activeAmenityCategory, setActiveAmenityCategory] = useState<string>('Bedroom & Sleeping');
+  const [propertyVibe, setPropertyVibe] = useState('Peaceful');
+  const [showPublishConfirmation, setShowPublishConfirmation] = useState(false);
+  const [showExitConfirmation, setShowExitConfirmation] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [formData, setFormData] = useState<Partial<Property>>(initialData || { ...DEFAULT_PROPERTY_DATA });
+  const initialJsonRef = useRef(JSON.stringify(initialData || DEFAULT_PROPERTY_DATA));
+  const isDirty = JSON.stringify(formData) !== initialJsonRef.current;
 
   const handleChange = (field: keyof Property, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleBackNavigation = () => {
+      if (!isDirty) {
+          onCancel(); 
+      } else {
+          setShowExitConfirmation(true);
+      }
+  };
+
+  const handleSaveAndExit = () => {
+      onSave(formData as Property);
+  };
+
+  const handleDiscard = () => {
+      onCancel();
   };
 
   const handleLocationChange = (lat: number, lng: number, addressDetails?: any) => {
@@ -208,11 +221,16 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
   };
 
   const addCustomAmenity = () => {
-      if(customAmenity.trim()) {
-          toggleAmenity(customAmenity.trim());
-          setCustomAmenity('');
+      if(amenitySearch.trim()) {
+          toggleAmenity(amenitySearch.trim());
+          setAmenitySearch('');
       }
   };
+
+  // Filter Amenities for Display
+  const filteredAmenities = amenitySearch 
+    ? MASTER_AMENITIES_LIST.filter(a => a.name.toLowerCase().includes(amenitySearch.toLowerCase()))
+    : MASTER_AMENITIES_LIST.filter(a => a.category === activeAmenityCategory);
 
   const handleAiDescription = async () => {
       if (!formData.city || !formData.type) {
@@ -381,45 +399,100 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
                              </div>
                         </div>
                     </div>
-                    {/* ... rest of step 2 ... */}
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <ToggleCard checked={formData.parking || false} onChange={(v) => handleChange('parking', v)} title="Parking Available" icon={Car} />
                         <ToggleCard checked={formData.petFriendly || false} onChange={(v) => handleChange('petFriendly', v)} title="Pet Friendly" icon={Dog} />
                     </div>
+                    
+                    {/* ENHANCED AMENITIES SECTION */}
                     <div>
                         <SectionHeader title="Amenities" icon={Check} />
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                            {AMENITIES_LIST.map(am => (
-                                <button 
-                                    key={am.id}
-                                    onClick={() => toggleAmenity(am.name)}
-                                    className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all h-24 gap-2 ${
-                                        formData.amenities?.includes(am.name) 
-                                        ? 'border-gray-900 dark:border-gray-700 bg-gray-900 dark:bg-gray-700 text-white shadow-md' 
-                                        : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
-                                    }`}
-                                >
-                                    {am.id === 'wifi' && <Wifi className="w-5 h-5" />}
-                                    {am.id === 'pool' && <Droplets className="w-5 h-5" />}
-                                    {['wifi', 'pool'].indexOf(am.id) === -1 && <Check className="w-5 h-5" />}
-                                    <span className="text-xs font-bold">{am.name}</span>
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex gap-2">
-                             <Input placeholder="Add custom amenity..." value={customAmenity} onChange={e => setCustomAmenity(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCustomAmenity()} />
-                             <button onClick={addCustomAmenity} className="bg-gray-900 dark:bg-gray-700 text-white px-4 rounded-xl font-bold hover:bg-black dark:hover:bg-gray-600 transition-colors"><Plus className="w-5 h-5" /></button>
-                        </div>
-                        {formData.amenities?.filter(a => !AMENITIES_LIST.find(l => l.name === a)).length! > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-4">
-                                {formData.amenities?.filter(a => !AMENITIES_LIST.find(l => l.name === a)).map(a => (
-                                    <span key={a} className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2">
-                                        {a}
-                                        <button onClick={() => toggleAmenity(a)} className="hover:text-red-500"><Trash2 className="w-3 h-3"/></button>
-                                    </span>
-                                ))}
+                        
+                        {/* Selected Amenities Display */}
+                        {formData.amenities && formData.amenities.length > 0 && (
+                            <div className="mb-6">
+                                <div className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">Selected ({formData.amenities.length})</div>
+                                <div className="flex flex-wrap gap-2">
+                                    {formData.amenities.map(am => {
+                                        const icon = getAmenityIcon(am);
+                                        return (
+                                            <button 
+                                                key={am} 
+                                                onClick={() => toggleAmenity(am)}
+                                                className="bg-black dark:bg-white text-white dark:text-black pl-3 pr-2 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 hover:opacity-80 transition-opacity group"
+                                            >
+                                                {React.createElement(icon, { size: 12 })}
+                                                {am}
+                                                <div className="bg-white/20 dark:bg-black/10 rounded-full p-0.5">
+                                                    <X className="w-3 h-3" />
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         )}
+
+                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
+                            {/* Search Bar */}
+                            <div className="relative mb-4">
+                                <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                                <input 
+                                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:ring-2 focus:ring-black dark:focus:ring-white text-sm"
+                                    placeholder="Search amenities (e.g. WiFi, Pool, BBQ)..."
+                                    value={amenitySearch}
+                                    onChange={(e) => setAmenitySearch(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Category Tabs (Wrapped for better visibility) */}
+                            {!amenitySearch && (
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                    {Object.keys(AMENITY_CATEGORIES).map(cat => (
+                                        <button
+                                            key={cat}
+                                            onClick={() => setActiveAmenityCategory(cat)}
+                                            className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${
+                                                activeAmenityCategory === cat 
+                                                ? 'bg-black dark:bg-white text-white dark:text-black' 
+                                                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                            }`}
+                                        >
+                                            {cat}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Options Grid (Expanded, no nested scroll) */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                {filteredAmenities.map(am => (
+                                    <button 
+                                        key={am.name}
+                                        onClick={() => toggleAmenity(am.name)}
+                                        className={`flex items-center gap-3 p-3 rounded-xl text-left transition-all ${
+                                            formData.amenities?.includes(am.name) 
+                                            ? 'bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300' 
+                                            : 'bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                                        }`}
+                                    >
+                                        {React.createElement(am.icon, { className: "w-4 h-4 shrink-0" })}
+                                        <span className="text-xs font-medium truncate">{am.name}</span>
+                                        {formData.amenities?.includes(am.name) && <Check className="w-3 h-3 ml-auto shrink-0" />}
+                                    </button>
+                                ))}
+                                
+                                {filteredAmenities.length === 0 && amenitySearch && (
+                                    <button 
+                                        onClick={addCustomAmenity}
+                                        className="col-span-full py-3 px-4 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-brand-100 dark:hover:bg-brand-900/40"
+                                    >
+                                        <Plus className="w-4 h-4" /> Add "{amenitySearch}"
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
             );
@@ -600,16 +673,18 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
   };
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 flex flex-col h-[calc(100vh-6rem)] overflow-hidden transition-colors duration-300">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 flex flex-col h-[calc(100vh-6rem)] overflow-hidden transition-colors duration-300 relative">
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-white dark:bg-gray-900 z-10 shrink-0">
-        <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{initialData ? 'Edit Property' : 'List New Property'}</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 md:hidden">Step {currentStep} of {STEPS.length}</p>
+        <div className="flex items-center gap-3">
+            <button onClick={handleBackNavigation} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
+                <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+            </button>
+            <div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{initialData ? 'Edit Property' : 'List New Property'}</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 md:hidden">Step {currentStep} of {STEPS.length}</p>
+            </div>
         </div>
-        <button onClick={onCancel} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors">
-            <Trash2 className="w-5 h-5"/>
-        </button>
       </div>
 
       {/* Main Content Area */}
@@ -669,6 +744,45 @@ export const PropertyEditor: React.FC<PropertyEditorProps> = ({ initialData, onS
          )}
       </div>
 
+      {/* CONFIRMATION MODALS */}
+      
+      {/* 1. Unsaved Changes Exit Confirmation */}
+      {showExitConfirmation && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+              <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-sm w-full relative overflow-hidden shadow-2xl border border-gray-100 dark:border-gray-700 text-center">
+                  <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <AlertTriangle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Unsaved Changes</h2>
+                  <p className="text-gray-600 dark:text-gray-300 mb-8 text-sm">
+                      You have unsaved changes. Leaving now will discard them.
+                  </p>
+                  
+                  <div className="flex flex-col gap-3">
+                      <button 
+                          onClick={handleSaveAndExit}
+                          className="w-full py-3 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold hover:opacity-90 transition-opacity"
+                      >
+                          Save Changes & Exit
+                      </button>
+                      <button 
+                          onClick={handleDiscard}
+                          className="w-full py-3 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 rounded-xl font-bold hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      >
+                          Discard Changes
+                      </button>
+                      <button 
+                          onClick={() => setShowExitConfirmation(false)}
+                          className="text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mt-2"
+                      >
+                          Cancel
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* 2. Publish Confirmation */}
       {showPublishConfirmation && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
             <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 max-w-md w-full relative overflow-hidden shadow-2xl border border-gray-100 dark:border-gray-700 text-center">

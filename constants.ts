@@ -1,5 +1,10 @@
 
-import { Property, PropertyType, ServiceTask, HostProfile, Conversation } from './types';
+import { Property, PropertyType, ServiceTask, HostProfile, Conversation, Review } from './types';
+import { 
+    Wifi, Wind, Waves, Car, Utensils, Tv, Flame, Coffee, Dumbbell, Gamepad2, MonitorPlay, Trees, ShieldCheck, Sun,
+    BedDouble, Bath, Shirt, Music, Briefcase, Heart, Speaker, Thermometer, Box, Lock, Accessibility, 
+    Lightbulb, Droplets, Dog, Hammer, Sparkles, ChefHat, Flower2
+} from 'lucide-react';
 
 export const AI_SYSTEM_INSTRUCTION = `You are the AI Brain of AI BNB. 
 Assisting HOST. Context: {role: 'HOST'}.
@@ -12,63 +17,36 @@ export const AI_HOST_BRAIN_INSTRUCTION = `You are the "AI Manager" & "Listing Sp
 **CRITICAL "CHAT TO LIST" BEHAVIOR**:
 When a host wants to list a property, you must act as a **STRICT DATA ENTRY SPECIALIST**.
 You CANNOT create a listing until you have gathered **ALL** the following information. 
-Do not assume values unless you can **INFER** them with high certainty from your world knowledge (e.g., if City is Lonavala, infer State is Maharashtra and rough Lat/Lng).
+Do not assume values unless you can **INFER** them with high certainty from your world knowledge.
+
+**AMENITY MAPPING**:
+We have a massive database of amenities. When a user describes a feature (e.g., "It has a Nespresso machine"), MAP it to the closest standard amenity key in our database (e.g., "Espresso machine" or "Coffee maker").
 
 **URL INTELLIGENCE & IMPORT MODE**:
 If the user provides a URL (e.g., "elivaas.com/villa-in-goa/sun-villa-4bhk..."):
 1. **EXTRACT** details directly from the URL string.
-   - "villa-in-goa" -> City: Goa, Type: Villa.
-   - "sun-villa-4bhk" -> Title: Sun Villa, Bedrooms: 4.
-   - "private-pool" -> Pool: Private.
-2. **ACKNOWLEDGE** the import: "I've analyzed the link. I found [Property Name] in [City]."
-3. **SKIP** questions for data you already extracted. Only ask for missing info (usually Pricing or House Rules).
+2. **ACKNOWLEDGE** the import.
+3. **SKIP** questions for data you already extracted.
 
 **INTERVIEW PROTOCOL (Do not skip steps)**:
 
-1. **CORE DETAILS**: 
-   - Ask: Property Name, Property Type (Villa/Apartment/etc), and City.
-
-2. **EXACT LOCATION**: 
-   - Ask: Full Address, Area/Locality, and Pincode. (Infer State/Country).
-
-3. **STRUCTURE & CAPACITY**: 
-   - Ask: Number of Bedrooms, Bathrooms.
-   - Ask: Base Guest Count (included in price) and Maximum Guest Capacity.
-
-4. **AMENITIES**: 
-   - Ask: Pool details (Private/Shared/Size?), AC, WiFi, Parking.
-
-5. **FOOD & STAFF**: 
-   - Ask: Is there a Caretaker? (Name/Number). 
-   - Ask: Kitchen policy? Meals provided? Non-veg allowed?
-
-6. **POLICIES**: 
-   - Ask: Pet policy? Check-in time? Check-out time?
-
-7. **FINANCIALS & HOUSE RULES** (CRITICAL):
-   - Ask: **Security Deposit** amount? (e.g., ₹5000)
-   - Ask: **Refund Policy**? (e.g., 7 days, Non-refundable)
-   - Ask: **Smoking Policy** and **Quiet Hours**?
-
-8. **PRICING**: 
-   - Ask: Base Weekday Price, Weekend Price, and Extra Guest Charge.
-
-**WORLD AWARENESS & INFERENCE**:
-- If the user says "It's near Tiger Point, Lonavala", you should infer the GPS location is roughly { lat: 18.74, lng: 73.40 }.
-- If the user says "It's a luxury villa", infer that it likely has AC, WiFi, and maybe a Pool. Ask to confirm.
-- Use your knowledge of the area to write a short, catchy **Description** automatically in the payload.
+1. **CORE DETAILS**: Ask: Property Name, Type, and City.
+2. **EXACT LOCATION**: Ask: Full Address, Area, and Pincode.
+3. **STRUCTURE & CAPACITY**: Ask: Bedrooms, Bathrooms, Base/Max Guests.
+4. **AMENITIES**: Ask about Pool, AC, WiFi, Parking, and standout features.
+5. **FOOD & STAFF**: Ask about Caretaker, Kitchen usage, Meals.
+6. **POLICIES**: Ask about Pets, Check-in/out times.
+7. **FINANCIALS & RULES**: Ask: Security Deposit, Refund Policy, Smoking/Quiet Hours.
+8. **PRICING**: Ask: Base Weekday and Weekend Price.
 
 **CONFIRMATION RULE (PREVIEW)**:
-Once you have ALL 8 categories of data:
-1.  **SUMMARIZE** everything briefly.
-2.  **GENERATE** a [PREVIEW_LISTING: JSON_PAYLOAD] tag.
-3.  Do NOT generate the [ACTION: ADD_PROPERTY] tag directly. The user must click the UI button on the preview card.
+Once you have ALL 8 categories, GENERATE a [PREVIEW_LISTING: JSON_PAYLOAD] tag.
 
-**JSON PAYLOAD SCHEMA for PREVIEW_LISTING**:
+**JSON PAYLOAD SCHEMA**:
      {
        "title": "string",
-       "type": "Villa" | "Apartment" | "Homestay",
-       "description": "string (generate a short marketing description based on location/vibe)",
+       "type": "Villa" | "Apartment" | "Homestay" | "Cottage" | "Farmhouse",
+       "description": "string",
        "city": "string",
        "state": "string",
        "address": "string",
@@ -80,15 +58,15 @@ Once you have ALL 8 categories of data:
        "baseGuests": number,
        "maxGuests": number,
        "poolType": "Private" | "Shared" | "NA",
-       "poolSize": "string (optional)",
+       "poolSize": "string",
        "petFriendly": boolean,
        "kitchenAvailable": boolean,
        "nonVegAllowed": boolean,
        "mealsAvailable": boolean,
        "caretakerAvailable": boolean,
        "caretakerName": "string",
-       "checkInTime": "string (e.g. 13:00)",
-       "checkOutTime": "string (e.g. 11:00)",
+       "checkInTime": "string",
+       "checkOutTime": "string",
        "securityDeposit": number,
        "refundPolicy": "string",
        "cancellationPolicy": "string",
@@ -101,113 +79,29 @@ Once you have ALL 8 categories of data:
        "amenities": ["Pool", "Wifi", ...],
        "tempId": "unique_string_id"
      }
-
-**CAPABILITIES (ACTIONS)**:
-Use JSON Action Tags at the end of your response to execute tasks.
-
-1. **NAVIGATION**:
-   - User: "Show me my calendar" / "Calendar dikhao"
-   - You: "Sure, opening your calendar." [ACTION: {"type": "NAVIGATE", "payload": "calendar"}]
-
-2. **DYNAMIC PRICING (Agentic)**:
-   - "Set Saffron Villa price to 25000 for 25th Dec"
-   - Payload: {"propertyId": "1", "date": "2025-12-25", "price": 25000}
-   - [ACTION: {"type": "UPDATE_PRICE", "payload": {...}}]
-
-3. **BLOCKING DATES**:
-   - "Block dates for painting next week for Mannat"
-   - [ACTION: {"type": "BLOCK_DATES", "payload": {"propertyId": "3", "startDate": "...", "endDate": "...", "reason": "Maintenance"}}]
-
-4. **BOOKING APPROVAL**:
-   - "Approve Rahul's booking"
-   - [ACTION: {"type": "APPROVE_BOOKING", "payload": {"bookingId": "derived_from_context"}}]
-
-**LANGUAGES**: English, Hindi, Hinglish.
-**TONE**: Professional, thorough, yet conversational.
 `;
 
 export const AI_GUEST_INSTRUCTION = `You are the Elite AI Concierge for AI BNB.
 **YOUR KNOWLEDGE BASE (CONTEXT)**:
 You have access to a JSON object called 'context'. This contains:
 1. **inventory**: A list of properties with their rules, pricing, and amenities.
-2. **unavailableDates**: Inside each property object, there is an array of strings (YYYY-MM-DD). These are CONFIRMED booked/blocked dates.
-3. **searchCriteria**: The user's current filter settings.
-
-**TEMPORAL GROUNDING**:
-- You will receive the "CURRENT DATE" in your system instructions.
-- ALL user inputs relative to time (e.g., "Dec 30", "Next weekend", "Christmas") MUST be resolved relative to this Current Date.
-- If today is Dec 2025, and user says "Dec 30", they mean Dec 30, 2025. If today is Dec 30 2025, they might mean Dec 30 2026. Use common sense but prefer the future.
-- **NEVER** assume a year that is in the past relative to Current Date.
+2. **unavailableDates**: Confirmed booked dates.
+3. **searchCriteria**: User's current filter settings.
 
 **CORE BEHAVIORS**:
-
-1. **STRICT AVAILABILITY CHECK (Highest Priority)**:
-   - If a user asks "Is [Property] available on [Date]?", you MUST check the 'unavailableDates' array for that property.
-   - If the date is in the list -> Answer: "No, it is booked."
-   - If the date is NOT in the list -> Answer: "Yes, it is available."
-   - **NEVER** say "I don't have real-time data". You DO have the data in the context. Trust it.
-
-2. **CONSULTATIVE DISCOVERY**:
-   - If the user's request is broad (e.g., "I want a villa" or "Show me stays"), DO NOT just dump a list of properties.
-   - **ASK Qualifying Questions** to narrow it down:
-     - "When are you planning to visit?" (Crucial for availability)
-     - "How many guests will be joining?" (Crucial for capacity)
-     - "Do you have specific requirements like a private pool, pet-friendly policy, or specific dietary needs?"
-
-3. **ADAPTIVE REASONING**:
-   - If a user mentions a constraint (e.g., "I have a dog"), FILTER your mental list. Only recommend properties where 'petFriendly' is true.
-   - If they ask about food, check 'nonVegAllowed' and 'mealsAvailable' in the context before answering.
-   - If they reject a price, suggest a property with a lower 'price'.
-
-4. **RESPONSE STYLE**:
-   - Be helpful, warm, and sophisticated.
-   - Explain **WHY** you are recommending a place: "I recommend Saffron Villa because it accommodates your group of 6 and allows pets..."
-   - Use [PROPERTY: id] to display the card.
-   
-5. **BOOKING INTENT & JSON FORMAT (CRITICAL)**:
-   - Use [BOOKING_INTENT: JSON_PAYLOAD] ONLY when the user clearly confirms they want to book or proceed with a specific property.
-   - **JSON_PAYLOAD SCHEMA**:
-     {
-       "propertyId": "string",
-       "propertyName": "string",
-       "startDate": "YYYY-MM-DD",  // MUST be extracted from conversation or context. NEVER leave empty.
-       "endDate": "YYYY-MM-DD",    // MUST be extracted from conversation or context. NEVER leave empty.
-       "guests": number,
-       "totalPrice": number
-     }
-   - **MANDATORY**: You MUST convert natural language dates (e.g. "next friday") into YYYY-MM-DD format for 'startDate' and 'endDate' inside the JSON.
-
-**SCENARIO EXAMPLES**:
-- User: "Is Saffron Villa available Dec 25?"
-- You (Internal): Check 'unavailableDates' for '2025-12-25' (Assuming 2025 is current year). It is present.
-- You: "I'm sorry, Saffron Villa is already booked for Christmas. However, Heritage Haveli is available. Would you like to see that?"
-
-- User: "Book Saffron Villa for 6 people on Dec 7th to Dec 9th"
-- You: "Great choice! I've prepared the booking details for Saffron Villa for Dec 7-9. [BOOKING_INTENT: {"propertyId": "1", "propertyName": "Saffron Villa", "startDate": "2025-12-07", "endDate": "2025-12-09", "guests": 6, "totalPrice": 30000}]"
+1. **STRICT AVAILABILITY CHECK**: If a date is in 'unavailableDates', the property is booked.
+2. **CONSULTATIVE DISCOVERY**: Ask qualifying questions (Dates, Guests, Requirements).
+3. **ADAPTIVE REASONING**: Filter recommendations based on user constraints (Pets, Budget, Location).
+4. **RESPONSE STYLE**: Warm, helpful, sophisticated. Use [PROPERTY: id] to display cards.
+5. **BOOKING INTENT**: Use [BOOKING_INTENT: JSON_PAYLOAD] when user confirms booking.
 `;
 
-export const AI_SERVICE_INSTRUCTION = `You are the Field Operations AI.
-**ROLE**: Assistant for Cooks, Cleaners, and Maintenance staff.
-**GOAL**: Help them find their next task or report completion.
-**INTERACTION**:
-- If they ask "What's next?", show the next pending task.
-- If they say "I finished the cleaning at Saffron Villa", mark it as done (mock response).
-**TONE**: Direct, clear, efficient.`;
+export const AI_SERVICE_INSTRUCTION = `You are the Field Operations AI. Helper for Cooks, Cleaners, Maintenance.`;
 
-export const AI_MESSAGE_REGULATOR_INSTRUCTION = `You are a Content Safety Moderator for a travel platform.
-**TASK**: Analyze the user's message for any attempts to share direct contact information (Phone numbers, Email addresses, Social handles, External URLs) or requests to pay off-platform.
-**OUTPUT**: Return a JSON object: { "safe": boolean, "reason": string }.
-- If safe, reason is "Message looks good.".
-- If unsafe, reason explains what was blocked (e.g., "Phone number detected", "Email detected").
-**STRICTNESS**: High. We want to keep communication on the platform.
-**OBFUSCATION DETECTION**:
-- Users often try to hide phone numbers using code words or spacing.
-- DETECT patterns like:
-  - "99 apples, 87 bananas..." (Numbers hidden in counts)
-  - "call me at nine eight double one..."
-  - "8 8 2 1 9 0..." (Spaced out numbers)
-- **DISTRIBUTED NUMBERS**: Watch out for users sending single digits or small groups of numbers across multiple messages to form a phone number.
-- If you detect any string of numbers (digits or words) that resembles a phone number (10 digits in India), MARK AS UNSAFE.`;
+export const AI_MESSAGE_REGULATOR_INSTRUCTION = `You are a Content Safety Moderator.
+**TASK**: Analyze message for direct contact info (Phone, Email, URL) or off-platform payment requests.
+**OUTPUT**: { "safe": boolean, "reason": string }.
+If unsafe, explain why. High strictness.`;
 
 // Helper to generate a date string YYYY-MM-DD
 const getDate = (offset: number) => {
@@ -223,6 +117,133 @@ const STANDARD_RULES = {
     quietHours: '10PM - 7AM', smokingPolicy: 'Outdoors', cleaningPolicy: 'Daily'
 };
 
+const MOCK_REVIEWS: Review[] = [
+    {
+        id: 'r1',
+        guestId: 'guest1',
+        guestName: 'Arjun Verma',
+        guestAvatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=100',
+        rating: 5,
+        date: 'Oct 2024',
+        comment: 'Absolutely stunning villa! The pool was pristine and the caretaker cooked amazing meals. Will definitely visit again.',
+        cleanliness: 5, accuracy: 5, checkIn: 5, communication: 5, location: 5, value: 5
+    },
+    {
+        id: 'r2',
+        guestId: 'guest2',
+        guestName: 'Sarah Jenkins',
+        guestAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100',
+        rating: 4,
+        date: 'Sept 2024',
+        comment: 'Great location and vibe. The only issue was the WiFi being a bit spotty in the bedrooms, but the living area was fine.',
+        cleanliness: 5, accuracy: 4, checkIn: 5, communication: 4, location: 5, value: 4
+    }
+];
+
+// --- MASSIVE AMENITY DATABASE ---
+export const AMENITY_CATEGORIES = {
+    "Bedroom & Sleeping": [
+        "King-sized bed", "Queen-sized bed", "Double bed", "Single bed", "Twin beds", "Bunk beds", "Four-poster bed", "Canopy bed", "Adjustable beds", "Heated beds",
+        "Premium bedding", "Hypoallergenic pillows", "Memory foam pillows", "Blackout curtains", "Light-filtering curtains", "Soundproof windows", "Air-purifying system",
+        "Reading lights", "Walk-in closet", "In-room safe", "Full-length mirror", "Vanity mirror"
+    ],
+    "Bathroom & Toiletries": [
+        "Bathtub (standalone)", "Bathtub (soaking tub)", "Jacuzzi bathtub", "Rainfall showerhead", "Walk-in shower", "Dual showerheads", "Heated towel rack", "Bidet",
+        "Toilet with seat warmer", "Premium organic toiletries", "Bath robes", "Bathroom slippers", "Hair dryer (premium)", "Hair straightener", "Curling iron",
+        "Bathroom exhaust fan", "Heated bathroom floor", "Waterproof speaker", "Towel warmer", "Premium bath towels"
+    ],
+    "Kitchen & Dining": [
+        "Full kitchen", "Kitchenette", "Induction cooktop", "Gas stove", "Electric oven", "Microwave", "Dishwasher", "Refrigerator (large)", "Wine fridge", "Ice maker",
+        "Water dispenser", "Electric kettle", "Coffee maker", "Espresso machine", "Coffee grinder", "Blender", "Food processor", "Juicer", "Rice cooker", "Air fryer",
+        "BBQ/Grill (indoor)", "Cooking utensils", "Silverware", "Dishes & Cutlery", "Spice rack", "Pantry", "Dining table (8+ seater)", "Bar stools", "Breakfast bar"
+    ],
+    "Living & Entertainment": [
+        "Smart TV (55\"+)", "4K TV", "Home theater system", "Projector", "Soundbar", "Bluetooth speakers", "Smart speaker (Alexa/Google)", "Vinyl record player",
+        "Streaming services (Netflix/Prime)", "Gaming console (PS5/Xbox)", "Board games", "Pool table", "Foosball table", "Ping-pong table", "Piano", "Library/Books"
+    ],
+    "Outdoor & Garden": [
+        "Private pool", "Infinity pool", "Plunge pool", "Hot tub/Jacuzzi", "Sauna", "Steam room", "Outdoor shower", "Gazebo", "Pergola", "Cabana", "Fire pit",
+        "BBQ/Grill (outdoor)", "Pizza oven", "Tandoor", "Outdoor dining area", "Hammock", "Swing", "Sun loungers", "Landscaped garden", "Fruit trees", "Lawn",
+        "Badminton court", "Basketball hoop", "Outdoor lighting"
+    ],
+    "Climate & Comfort": [
+        "Air conditioning (Central)", "Air conditioning (Split)", "Ceiling fans", "Portable fans", "Heating", "Fireplace (Wood)", "Fireplace (Gas/Electric)", 
+        "Dehumidifier", "Air purifier", "Mosquito net"
+    ],
+    "Connectivity & Tech": [
+        "WiFi (High-speed)", "WiFi (Fiber)", "Dedicated workspace", "Ergonomic chair", "Monitor/Screen", "Printer", "Universal adapters", "USB charging ports",
+        "Smart locks", "Video doorbell", "CCTV Security", "EV Charging Station"
+    ],
+    "Services & Staff": [
+        "Caretaker (On-site)", "Chef/Cook available", "Housekeeping (Daily)", "Laundry service", "Grocery delivery", "Massage/Spa services", "Yoga instructor on-call",
+        "Driver/Cab service"
+    ],
+    "Family & Kids": [
+        "Crib/Cot", "High chair", "Baby monitor", "Baby safety gates", "Children's books & toys", "Board games for kids", "Baby bath"
+    ],
+    "Pet Amenities": [
+        "Pet-friendly", "Dog bed", "Cat bed", "Pet bowls", "Fenced yard", "Pet wash area"
+    ],
+    "Safety": [
+        "Fire extinguisher", "Smoke alarm", "Carbon monoxide alarm", "First aid kit", "Emergency exit route", "Safe"
+    ]
+};
+
+// Helper to determine icon for any amenity string
+export const getAmenityIcon = (name: string) => {
+    const lower = name.toLowerCase();
+    
+    // Explicit Mappings for high-value items
+    if (lower.includes('wifi') || lower.includes('internet')) return Wifi;
+    if (lower.includes('pool') || lower.includes('jacuzzi') || lower.includes('tub')) return Waves;
+    if (lower.includes('ac') || lower.includes('air condition') || lower.includes('fan')) return Wind;
+    if (lower.includes('tv') || lower.includes('netflix') || lower.includes('projector') || lower.includes('theater')) return Tv;
+    if (lower.includes('kitchen') || lower.includes('stove') || lower.includes('fridge') || lower.includes('oven')) return Utensils;
+    if (lower.includes('bed') || lower.includes('pillow') || lower.includes('mattress')) return BedDouble;
+    if (lower.includes('bath') || lower.includes('shower') || lower.includes('toilet')) return Bath;
+    if (lower.includes('parking') || lower.includes('ev charging') || lower.includes('garage')) return Car;
+    if (lower.includes('pet') || lower.includes('dog') || lower.includes('cat')) return Dog;
+    if (lower.includes('garden') || lower.includes('lawn') || lower.includes('outdoor') || lower.includes('patio')) return Trees;
+    if (lower.includes('bbq') || lower.includes('grill') || lower.includes('fire pit') || lower.includes('bonfire')) return Flame;
+    if (lower.includes('coffee') || lower.includes('espresso') || lower.includes('kettle')) return Coffee;
+    if (lower.includes('music') || lower.includes('speaker') || lower.includes('sound')) return Speaker;
+    if (lower.includes('gym') || lower.includes('yoga') || lower.includes('fitness')) return Dumbbell;
+    if (lower.includes('game') || lower.includes('console') || lower.includes('playstation')) return Gamepad2;
+    if (lower.includes('work') || lower.includes('desk') || lower.includes('chair')) return Briefcase;
+    if (lower.includes('security') || lower.includes('cctv') || lower.includes('safe') || lower.includes('lock')) return ShieldCheck;
+    if (lower.includes('caretaker') || lower.includes('chef') || lower.includes('staff')) return ChefHat;
+    if (lower.includes('washer') || lower.includes('dryer') || lower.includes('laundry') || lower.includes('iron')) return Shirt;
+    if (lower.includes('beach') || lower.includes('view')) return Sun;
+    
+    // Category Fallbacks if string analysis fails, try to match by category existence (slower but safer)
+    for (const [cat, items] of Object.entries(AMENITY_CATEGORIES)) {
+        if (items.includes(name)) {
+            if (cat.includes("Bedroom")) return BedDouble;
+            if (cat.includes("Bathroom")) return Bath;
+            if (cat.includes("Kitchen")) return Utensils;
+            if (cat.includes("Living")) return Tv;
+            if (cat.includes("Outdoor")) return Trees;
+            if (cat.includes("Tech")) return Wifi;
+            if (cat.includes("Staff")) return ChefHat;
+            if (cat.includes("Safety")) return ShieldCheck;
+        }
+    }
+
+    return Sparkles; // Default generic icon
+};
+
+// Flattened list for search/filtering
+export const MASTER_AMENITIES_LIST = Object.entries(AMENITY_CATEGORIES).flatMap(([category, items]) => 
+    items.map(item => ({ name: item, category, icon: getAmenityIcon(item) }))
+);
+
+// Map library for quick lookup by name
+export const AMENITIES_LIBRARY = MASTER_AMENITIES_LIST.reduce((acc, item) => {
+    acc[item.name] = { icon: item.icon, label: item.name };
+    return acc;
+}, {} as Record<string, any>);
+
+
 export const MOCK_PROPERTIES: Property[] = [
   {
     id: '1',
@@ -230,17 +251,19 @@ export const MOCK_PROPERTIES: Property[] = [
     description: 'A 4BHK luxury villa in Lonavala with a private pool, overlooking the Sahyadri mountains. Perfect for family getaways.',
     type: PropertyType.VILLA,
     status: 'active',
-    rating: 4.92, // High rating qualifies for Guest Favorite
+    rating: 4.92,
     address: 'Plot 45, Tungarli', location: 'Tungarli', city: 'Lonavala', state: 'Maharashtra', country: 'India', pincode: '410401',
     gpsLocation: { lat: 18.75, lng: 73.40 },
     bedrooms: 4, bathrooms: 5, poolType: 'Private', poolSize: '20x10 ft', parking: true, petFriendly: false,
-    amenities: ['Pool', 'Wifi', 'AC', 'Parking', 'Caretaker', 'TV', 'Bonfire'],
+    amenities: ['Private pool', 'WiFi (High-speed)', 'Air conditioning (Split)', 'BBQ/Grill (outdoor)', 'Caretaker (On-site)', 'Smart TV (55"+)', 'Full kitchen', 'Generator backup'],
     kitchenAvailable: true, nonVegAllowed: true, mealsAvailable: true, wifiPassword: 'guest',
     caretakerAvailable: true, caretakerName: 'Ramesh', checkInTime: '13:00', checkOutTime: '11:00',
     baseGuests: 8, maxGuests: 12, currency: 'INR', baseWeekdayPrice: 15000, baseWeekendPrice: 22000, extraGuestPrice: 1500,
     rules: { ...STANDARD_RULES },
     images: ['https://images.unsplash.com/photo-1613977257363-707ba9348227?q=80&w=2670&auto=format&fit=crop'],
-    mealPlans: [], addOns: [], pricingRules: [], calendar: {}, reviews: [], occupancyRate: 78, revenueLastMonth: 120000,
+    mealPlans: [], addOns: [], pricingRules: [], calendar: {}, 
+    reviews: MOCK_REVIEWS, 
+    occupancyRate: 78, revenueLastMonth: 120000,
     hostId: 'host1'
   },
   {
@@ -249,11 +272,11 @@ export const MOCK_PROPERTIES: Property[] = [
     description: 'Restored 19th-century Haveli in the Pink City. Traditional decor with modern amenities.',
     type: PropertyType.HOMESTAY,
     status: 'active',
-    rating: 4.70, // Below 4.8 threshold, will not show Guest Favorite badge
+    rating: 4.70,
     address: 'Old City', location: 'Pink City', city: 'Jaipur', state: 'Rajasthan', country: 'India', pincode: '302002',
     gpsLocation: { lat: 26.91, lng: 75.78 },
     bedrooms: 3, bathrooms: 3, poolType: 'NA', parking: false, petFriendly: true,
-    amenities: ['Wifi', 'Breakfast', 'AC', 'Library'],
+    amenities: ['WiFi (High-speed)', 'Breakfast included', 'Air conditioning (Split)', 'Library/Books', 'Landscaped garden', 'Heritage decor'],
     kitchenAvailable: false, nonVegAllowed: false, mealsAvailable: true,
     caretakerAvailable: true, caretakerName: 'Singh', checkInTime: '12:00', checkOutTime: '10:00',
     baseGuests: 6, maxGuests: 6, currency: 'INR', baseWeekdayPrice: 8500, baseWeekendPrice: 10000, extraGuestPrice: 0,
@@ -272,7 +295,7 @@ export const MOCK_PROPERTIES: Property[] = [
       address: 'Beach Road', location: 'Alibaug', city: 'Alibaug', state: 'Maharashtra', country: 'India', pincode: '402201',
       gpsLocation: { lat: 18.64, lng: 72.87 },
       bedrooms: 5, bathrooms: 6, poolType: 'Private', poolSize: '25x12 ft', parking: true, petFriendly: true,
-      amenities: ['Pool', 'Wifi', 'AC', 'Beach Access', 'Caretaker', 'BBQ'],
+      amenities: ['Private pool', 'WiFi (High-speed)', 'Air conditioning (Split)', 'Beach Access', 'Caretaker (On-site)', 'BBQ/Grill (outdoor)', 'Sound system', 'Full kitchen'],
       kitchenAvailable: true, nonVegAllowed: true, mealsAvailable: true,
       caretakerAvailable: true, caretakerName: 'Suresh', checkInTime: '14:00', checkOutTime: '11:00',
       baseGuests: 10, maxGuests: 15, currency: 'INR', baseWeekdayPrice: 25000, baseWeekendPrice: 35000, extraGuestPrice: 2000,
@@ -280,11 +303,27 @@ export const MOCK_PROPERTIES: Property[] = [
       images: ['https://images.unsplash.com/photo-1512917774080-9991f1c4c750?q=80&w=2670&auto=format&fit=crop'],
       mealPlans: [], addOns: [], pricingRules: [], calendar: {}, reviews: [], occupancyRate: 85, revenueLastMonth: 450000,
       hostId: 'host1'
+  },
+  {
+      id: 'maintenance_1',
+      title: 'Old Stone Cottage',
+      description: 'Undergoing structural repairs for the roof.',
+      type: PropertyType.COTTAGE,
+      status: 'maintenance',
+      maintenanceStartedAt: getDate(-65),
+      rating: 4.5,
+      address: 'Hill Top', location: 'Manali', city: 'Manali', state: 'Himachal Pradesh', country: 'India', pincode: '175131',
+      gpsLocation: { lat: 32.2396, lng: 77.1887 },
+      bedrooms: 2, bathrooms: 1, poolType: 'NA', parking: false, petFriendly: true,
+      amenities: ['WiFi (High-speed)', 'Heater', 'Fireplace (Wood)'],
+      kitchenAvailable: true, nonVegAllowed: true, mealsAvailable: false,
+      caretakerAvailable: false, checkInTime: '12:00', checkOutTime: '10:00',
+      baseGuests: 4, maxGuests: 4, currency: 'INR', baseWeekdayPrice: 5000, baseWeekendPrice: 6000, extraGuestPrice: 0,
+      rules: { ...STANDARD_RULES },
+      images: ['https://images.unsplash.com/photo-1518780664697-55e3ad937233?q=80&w=2565&auto=format&fit=crop'],
+      mealPlans: [], addOns: [], pricingRules: [], calendar: {}, reviews: [], occupancyRate: 0, revenueLastMonth: 0,
+      hostId: 'host1'
   }
-];
-
-export const AMENITIES_LIST = [
-    { id: 'wifi', name: 'WiFi', icon: 'Wifi' }, { id: 'ac', name: 'AC', icon: 'Wind' }, { id: 'pool', name: 'Pool', icon: 'Waves' }
 ];
 
 export const MOCK_TASKS: ServiceTask[] = [

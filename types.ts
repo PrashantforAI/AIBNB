@@ -60,10 +60,19 @@ export interface DaySettings {
 
 export interface Review {
     id: string;
+    guestId: string;
     guestName: string;
-    rating: number;
+    guestAvatar?: string;
+    rating: number; // Overall 1-5
     date: string;
     comment: string;
+    // Granular ratings (optional)
+    cleanliness?: number;
+    accuracy?: number;
+    checkIn?: number;
+    communication?: number;
+    location?: number;
+    value?: number;
 }
 
 export interface Booking {
@@ -122,7 +131,12 @@ export interface Property {
   title: string;
   description: string;
   type: PropertyType;
-  status: 'active' | 'draft' | 'maintenance';
+  status: 'active' | 'draft' | 'maintenance' | 'archived';
+  
+  // Status Tracking
+  archivedAt?: string; // ISO Date
+  maintenanceStartedAt?: string; // ISO Date
+
   rating?: number;
   hostId?: string;
   address: string;

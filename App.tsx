@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { HostDashboard } from './pages/HostDashboard';
@@ -13,7 +12,7 @@ import { Messages } from './pages/Messages';
 import { AIChat } from './components/AIChat';
 import { MOCK_PROPERTIES, AI_SYSTEM_INSTRUCTION, AI_GUEST_INSTRUCTION, AI_HOST_BRAIN_INSTRUCTION, AI_SERVICE_INSTRUCTION, MOCK_TASKS, MOCK_HOST_PROFILE } from './constants';
 import { Property, DaySettings, Booking, SearchCriteria, UserRole, ServiceTask, AIAction, HostProfile, PropertyType } from './types';
-import { fetchProperties, savePropertyToDb, updateCalendarDay } from './services/propertyService';
+import { fetchProperties, savePropertyToDb, updateCalendarDay, deletePropertyFromDb } from './services/propertyService';
 import { createBooking, fetchGuestBookings, fetchPendingBookings, updateBookingStatus } from './services/bookingService';
 import { startConversation, sendMessage } from './services/chatService'; 
 import { fetchUserProfile, saveUserProfile } from './services/userService';
@@ -215,6 +214,50 @@ function App() {
   const handleUpdateProperty = async (p: Property) => {
       setProperties(prev => prev.map(prevP => prevP.id === p.id ? p : prevP));
       try { await savePropertyToDb(p); } catch (e) {}
+  };
+
+  const handleDeleteProperty = async (id: string) => {
+      if (confirm("Are you sure you want to delete this property? This action cannot be undone.")) {
+          try {
+            await deletePropertyFromDb(id);
+            setProperties(prev => prev.filter(p => p.id !== id));
+          } catch(e) { 
+              console.error(e); 
+              alert("Failed to delete property"); 
+          }
+      }
+  };
+
+  const handleStatusChange = async (id: string, newStatus: Property['status']) => {
+      const prop = properties.find(p => p.id === id);
+      if (prop) {
+          const updates: Partial<Property> = { status: newStatus };
+          
+          if (newStatus === 'maintenance') {
+              updates.maintenanceStartedAt = new Date().toISOString();
+              updates.archivedAt = undefined;
+          } else if (newStatus === 'archived') {
+              updates.archivedAt = new Date().toISOString();
+              updates.maintenanceStartedAt = undefined;
+          } else {
+              // Active or Draft - clear flags
+              updates.maintenanceStartedAt = undefined;
+              updates.archivedAt = undefined;
+          }
+
+          const updated = { ...prop, ...updates };
+          
+          // IMMEDIATE UI UPDATE
+          setProperties(prev => prev.map(p => p.id === id ? updated : p));
+          
+          try {
+              await savePropertyToDb(updated as Property);
+          } catch(e) {
+              console.error("Failed to update status", e);
+              // Revert if failed
+              setProperties(prev => prev.map(p => p.id === id ? prop : p));
+          }
+      }
   };
 
   const handleAiBooking = async (proposal: any) => {
@@ -514,6 +557,7 @@ function App() {
                 id: p.id, 
                 title: p.title, 
                 city: p.city,
+                status: p.status, // Added status for host awareness
                 basePrice: p.baseWeekdayPrice,
                 revenue: p.revenueLastMonth 
             })),
@@ -541,7 +585,17 @@ function App() {
             status: b.status,
             code: b.bookingCode
         })),
-        properties: properties.map(p => ({ id: p.id, title: p.title, price: p.baseWeekdayPrice, city: p.city, amenities: p.amenities, chef: p.rules?.chefAvailable, meals: p.mealsAvailable, description: p.description?.substring(0, 100) })),
+        // Filter out non-active properties from Guest AI Context
+        properties: properties.filter(p => p.status === 'active').map(p => ({ 
+            id: p.id, 
+            title: p.title, 
+            price: p.baseWeekdayPrice, 
+            city: p.city, 
+            amenities: p.amenities, 
+            chef: p.rules?.chefAvailable, 
+            meals: p.mealsAvailable, 
+            description: p.description?.substring(0, 100) 
+        })),
         currentView: activePage,
         searchCriteria
     });
@@ -560,6 +614,9 @@ function App() {
       return (userRole === UserRole.HOST ? AI_HOST_BRAIN_INSTRUCTION : AI_GUEST_INSTRUCTION) + timeContext;
   }
 
+  // --- GUEST ROUTING LOGIC ---
+  const isGuestPage = ['guest-dashboard', 'explore', 'chat', 'trips', 'messages', 'wishlist', 'profile'].includes(activePage);
+
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-black text-gray-900 dark:text-white"><Loader2 className="w-10 h-10 animate-spin" /></div>;
 
   return (
@@ -573,6 +630,7 @@ function App() {
                 mode="fullscreen"
                 userRole={userRole}
                 userName={currentUserName}
+                userAvatar={currentUserAvatar}
                 context={generateContext()}
                 systemInstruction={getSystemInstruction()}
                 onEnterDashboard={enterDashboard}
@@ -581,6 +639,9 @@ function App() {
                 onBook={handleAiBooking}
                 properties={properties}
                 onNavigate={handleNavigate}
+                onToggleTheme={toggleTheme}
+                onSwitchRole={switchRole}
+                isDarkMode={theme === 'dark'}
              />
         ) : (
             /* === 2. DASHBOARD VIEWS === */
@@ -606,16 +667,32 @@ function App() {
                                         mode="fullscreen"
                                         userRole={UserRole.HOST}
                                         userName={hostProfile.name}
+                                        userAvatar={hostProfile.avatar}
                                         context={generateContext()} 
                                         systemInstruction={getSystemInstruction()} 
                                         properties={properties} 
                                         onPreview={handlePreviewProperty} 
                                         onBook={handleAiBooking} 
                                         onAction={handleAIAction}
+                                        onNavigate={handleNavigate}
+                                        onToggleTheme={toggleTheme}
+                                        onSwitchRole={switchRole}
+                                        isDarkMode={theme === 'dark'}
+                                        // FIX: Hide double menu button inside Host Layout
+                                        showMenuButton={false}
                                     />
                                 </div>
                             )}
-                            {activePage === 'listings' && <PropertyList properties={properties} onEdit={handleEditProperty} onAddNew={handleAddNew} onPreview={handlePreviewProperty} />}
+                            {activePage === 'listings' && 
+                              <PropertyList 
+                                properties={properties} 
+                                onEdit={handleEditProperty} 
+                                onAddNew={handleAddNew} 
+                                onPreview={handlePreviewProperty} 
+                                onDelete={handleDeleteProperty}
+                                onStatusChange={handleStatusChange}
+                              />
+                            }
                             {activePage === 'calendar' && <CalendarManager properties={properties} onUpdateProperty={handleUpdateProperty} />}
                             {activePage === 'messages' && <Messages currentUserId={currentUserId} userRole={userRole} />} 
                             {activePage === 'profile' && <HostProfilePage profile={hostProfile} isEditable={true} onSave={handleSaveProfile} currentUserId={currentUserId} />}
@@ -625,7 +702,8 @@ function App() {
                     </Layout>
                 ) : userRole === UserRole.GUEST ? (
                     <>
-                        {activePage === 'guest-dashboard' && (
+                        {/* Unified Guest Dashboard Rendering to prevent blank screens */}
+                        {isGuestPage && (
                             <GuestDashboard 
                                 properties={properties} 
                                 onNavigate={handleNavigate} 
@@ -641,6 +719,7 @@ function App() {
                                 onToggleTheme={toggleTheme}
                                 onSwitchRole={switchRole}
                                 isDarkMode={theme === 'dark'}
+                                initialTab={activePage === 'guest-dashboard' ? 'explore' : activePage as any}
                             />
                         )}
 

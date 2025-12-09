@@ -1,8 +1,9 @@
 
+
 import React, { useState, useEffect } from 'react';
-import { Property, DaySettings } from '../types';
-import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2, Dog, Clock, Ban, Calendar as CalendarIcon, X, Sparkles, MessageSquare } from 'lucide-react';
-import { AMENITIES_LIST } from '../constants';
+import { Property, DaySettings, Review } from '../types';
+import { Star, MapPin, Users, BedDouble, Bath, Wifi, Car, Utensils, Share2, Heart, ChevronLeft, ChevronRight, CheckCircle2, UserCheck, ShieldCheck, Loader2, Dog, Clock, Ban, Calendar as CalendarIcon, X, Sparkles, MessageSquare, ThumbsUp, Flag } from 'lucide-react';
+import { AMENITIES_LIBRARY } from '../constants';
 import { createBooking, getUnavailableDates, getDatesInRange } from '../services/bookingService';
 import { startConversation } from '../services/chatService';
 import { CalendarPopup } from '../components/CalendarPopup';
@@ -27,10 +28,30 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isMessaging, setIsMessaging] = useState(false);
+  const [showAllReviews, setShowAllReviews] = useState(false);
   
   const [activePicker, setActivePicker] = useState<'checkIn' | 'checkOut' | 'guests' | null>(null);
 
   const unavailableDates = getUnavailableDates(property);
+
+  // --- Amenities Logic ---
+  // Map string array to Icon Objects
+  const displayedAmenities = property.amenities.map(name => {
+      // Fuzzy match or direct lookup in library
+      const libItem = AMENITIES_LIBRARY[name as keyof typeof AMENITIES_LIBRARY];
+      return libItem ? { name: libItem.label, icon: libItem.icon } : { name, icon: CheckCircle2 };
+  });
+
+  // --- Reviews Logic ---
+  const reviews = property.reviews || [];
+  const ratingBreakdown = {
+      cleanliness: 4.9,
+      accuracy: 4.8,
+      checkIn: 5.0,
+      communication: 4.9,
+      location: 4.7,
+      value: 4.8
+  };
 
   // Helper used for pricing calculation (NIGHTS)
   const getDaysArray = (start: string, end: string) => {
@@ -190,7 +211,7 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
         <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-6">
             <span className="flex items-center gap-1 font-bold text-gray-900 dark:text-white"><Star className="w-3.5 h-3.5 fill-current text-gold-500"/> {property.rating || 'New'}</span>
             <span className="hidden sm:inline">·</span>
-            <span className="underline decoration-gray-300 cursor-pointer hover:text-gray-900 dark:text-white">12 reviews</span>
+            <span className="underline decoration-gray-300 cursor-pointer hover:text-gray-900 dark:text-white">{reviews.length} reviews</span>
             <span className="hidden sm:inline">·</span>
             <span className="flex items-center gap-1 text-gray-900 dark:text-white font-medium">{property.city}, {property.state}</span>
         </div>
@@ -220,10 +241,12 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 relative">
-            <div className="lg:col-span-2 space-y-8">
+            <div className="lg:col-span-2 space-y-10">
+                
+                {/* Host Info */}
                 <div 
                     onClick={() => onViewHost && onViewHost(property.hostId || 'host1')}
-                    className="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-6 cursor-pointer group hover:opacity-80 transition-opacity"
+                    className="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-8 cursor-pointer group hover:opacity-80 transition-opacity"
                 >
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1 group-hover:underline decoration-brand-500">Hosted by {hostName}</h2>
@@ -234,35 +257,41 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                         </div>
                     </div>
                     {hostAvatar ? (
-                        <img src={hostAvatar} alt={hostName} className="w-12 h-12 rounded-full object-cover shadow-md border-2 border-white dark:border-gray-900 transition-transform group-hover:scale-105" />
+                        <img src={hostAvatar} alt={hostName} className="w-14 h-14 rounded-full object-cover shadow-md border-2 border-white dark:border-gray-900 transition-transform group-hover:scale-105" />
                     ) : (
-                        <div className="w-12 h-12 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center font-bold text-lg shadow-md border-2 border-white dark:border-gray-900 transition-transform group-hover:scale-105">
+                        <div className="w-14 h-14 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center font-bold text-lg shadow-md border-2 border-white dark:border-gray-900 transition-transform group-hover:scale-105">
                             {hostName.charAt(0)}
                         </div>
                     )}
                 </div>
 
+                {/* Description */}
                 <div className="space-y-4 text-gray-600 dark:text-gray-300 leading-relaxed border-b border-gray-100 dark:border-gray-800 pb-8 text-base">
                     <p>{property.description}</p>
                 </div>
 
+                {/* AMENITIES SECTION (UPDATED) */}
                 <div className="border-b border-gray-100 dark:border-gray-800 pb-8">
-                    <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-5">Amenities</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4">
-                        {property.amenities.map(am => (
-                            <div key={am} className="flex items-center gap-3 text-gray-700 dark:text-gray-300">
-                                <div className="p-1.5 bg-gray-50 dark:bg-gray-800 rounded-md">
-                                    <CheckCircle2 className="w-4 h-4 text-gray-400" />
+                    <h3 className="font-bold text-gray-900 dark:text-white text-xl mb-6">What this place offers</h3>
+                    <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+                        {displayedAmenities.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-4">
+                                <div className="text-gray-700 dark:text-gray-300">
+                                    {React.createElement(item.icon, { size: 24, strokeWidth: 1.5 })}
                                 </div>
-                                <span className="text-sm font-medium">{am}</span>
+                                <span className="text-gray-700 dark:text-gray-300 font-medium">{item.name}</span>
                             </div>
                         ))}
                     </div>
+                    <button className="mt-6 border border-gray-900 dark:border-gray-100 text-gray-900 dark:text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        Show all amenities
+                    </button>
                 </div>
                 
-                <div className="pb-6 border-b border-gray-100 dark:border-gray-800">
-                    <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-6">Things to know</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-gray-50 dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
+                {/* Rules Section */}
+                <div className="pb-8 border-b border-gray-100 dark:border-gray-800">
+                    <h3 className="font-bold text-gray-900 dark:text-white text-xl mb-6">Things to know</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div>
                              <h4 className="font-bold text-gray-900 dark:text-white text-sm mb-4 uppercase tracking-wider">House Rules</h4>
                              <div className="space-y-5">
@@ -285,10 +314,59 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                     </div>
                 </div>
 
-                {/* Map Location Section */}
+                {/* REVIEWS SECTION (NEW) */}
+                <div className="pb-8 border-b border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center gap-2 mb-8">
+                        <Star className="w-6 h-6 fill-current text-gray-900 dark:text-white" />
+                        <span className="text-2xl font-bold text-gray-900 dark:text-white">{property.rating?.toFixed(2) || 'New'} · {reviews.length} reviews</span>
+                    </div>
+
+                    {/* Rating Breakdown */}
+                    {reviews.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-2 gap-x-12 gap-y-4 mb-8">
+                            {Object.entries(ratingBreakdown).map(([key, val]) => (
+                                <div key={key} className="flex items-center justify-between">
+                                    <span className="text-gray-700 dark:text-gray-300 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                    <div className="flex items-center gap-3 w-32">
+                                        <div className="h-1 flex-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                            <div className="h-full bg-black dark:bg-white" style={{ width: `${(val / 5) * 100}%` }}></div>
+                                        </div>
+                                        <span className="text-xs font-bold text-gray-900 dark:text-white">{val.toFixed(1)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Review Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {reviews.slice(0, 4).map(review => (
+                            <div key={review.id} className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <img src={review.guestAvatar || 'https://via.placeholder.com/100'} className="w-10 h-10 rounded-full object-cover" alt={review.guestName} />
+                                    <div>
+                                        <h4 className="font-bold text-gray-900 dark:text-white text-sm">{review.guestName}</h4>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">{review.date}</p>
+                                    </div>
+                                </div>
+                                <div className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
+                                    {review.comment}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    
+                    {reviews.length > 4 && (
+                        <button className="mt-8 border border-gray-900 dark:border-gray-100 text-gray-900 dark:text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                            Show all {reviews.length} reviews
+                        </button>
+                    )}
+                </div>
+
+                {/* Map Location Section (Read Only with clean style) */}
                 <div className="pb-6">
-                    <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-6">Where you'll be</h3>
-                    <div className="h-[400px] rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 z-0">
+                    <h3 className="font-bold text-gray-900 dark:text-white text-xl mb-6">Where you'll be</h3>
+                    <div className="h-[480px] rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 z-0">
                          <LocationPicker 
                             lat={property.gpsLocation?.lat || 20.5937} 
                             lng={property.gpsLocation?.lng || 78.9629} 
@@ -297,8 +375,11 @@ export const GuestPropertyDetails: React.FC<GuestPropertyDetailsProps> = ({ prop
                             className="w-full h-full"
                          />
                     </div>
-                    <p className="mt-4 text-gray-600 dark:text-gray-400 text-sm">
+                    <p className="mt-4 text-gray-600 dark:text-gray-400 font-medium">
                         {property.location}, {property.city}, {property.state}, {property.pincode}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-500">
+                        Exact location provided after booking.
                     </p>
                 </div>
             </div>

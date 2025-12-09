@@ -87,8 +87,8 @@ export const Layout: React.FC<LayoutProps> = ({
 
             {isMenuOpen && (
                 <>
-                    <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>
-                    <div className="absolute top-12 right-0 w-72 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden z-50 animate-fadeIn origin-top-right">
+                    <div className="fixed inset-0 z-[1999]" onClick={() => setIsMenuOpen(false)}></div>
+                    <div className="absolute top-12 right-0 w-72 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden z-[2000] animate-fadeIn origin-top-right">
                         <div className="py-2">
                             <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 mb-2">
                                 <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{userName || 'Pine Stays'}</p>

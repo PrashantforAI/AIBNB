@@ -1,25 +1,30 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { sendMessageToAI, initializeChat, parseAIResponse } from '../services/aiService';
 import { ChatMessage, Property, AIAction, UserRole } from '../types';
-import { MessageSquare, X, Send, Sparkles, Loader2, Bot, ArrowRight, Star, CheckCircle, Calendar, MapPin, LayoutDashboard, Zap, AlertTriangle, Minus, Plus, Mic, StopCircle, Hotel, BedDouble, Bath, Home, ShieldCheck } from 'lucide-react';
+import { Sparkles, Loader2, ArrowRight, Minus, Plus, Mic, Hotel, CheckCircle, Menu, Home, List, Calendar, Settings, LogOut, UserCircle, MessageSquare, RefreshCw, Sun, Moon } from 'lucide-react';
 import { CalendarPopup } from './CalendarPopup';
 import { getUnavailableDates } from '../services/bookingService';
 
 interface AIChatProps {
   context?: string;
   systemInstruction?: string;
-  nudgeMessage?: string;
   properties?: Property[];
   onPreview?: (property: Property) => void;
   onBook?: (booking: any) => Promise<void>;
   onAction?: (action: AIAction) => void;
-  onEnterDashboard?: () => void;
+  onEnterDashboard?: () => void; // Used to exit chat mode
   mode?: 'floating' | 'fullscreen';
   userRole?: UserRole;
   userName?: string;
+  userAvatar?: string;
   isOpen?: boolean;
   onToggle?: (isOpen: boolean) => void;
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: string) => void; // Navigation handler
+  onToggleTheme?: () => void;
+  onSwitchRole?: () => void;
+  isDarkMode?: boolean;
+  showMenuButton?: boolean; // New prop to control header visibility
 }
 
 const ChatPropertyCard: React.FC<{ property: Property; onPreview: (p: Property) => void }> = ({ property, onPreview }) => {
@@ -33,7 +38,7 @@ const ChatPropertyCard: React.FC<{ property: Property; onPreview: (p: Property) 
             <div>
                 <h4 className="font-semibold text-gray-900 dark:text-white text-sm truncate">{property.title}</h4>
                 <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    <MapPin className="w-3 h-3" /> {property.city}
+                    <span className="truncate">{property.city}</span>
                 </div>
             </div>
             <div className="flex justify-between items-center mt-1">
@@ -175,94 +180,6 @@ const BookingProposalCard: React.FC<{ proposal: any; onBook?: (b: any) => Promis
     );
 };
 
-const ListingPreviewCard: React.FC<{ previewData: any; onConfirm: (data: any) => void }> = ({ previewData, onConfirm }) => {
-    const [status, setStatus] = useState<'idle' | 'creating' | 'done'>('idle');
-
-    const handleCreate = () => {
-        setStatus('creating');
-        onConfirm({ type: 'ADD_PROPERTY', payload: previewData });
-        // Assume success after short delay from parent prop update, but show UI feedback immediately
-        setTimeout(() => setStatus('done'), 1500);
-    };
-
-    if (status === 'done') {
-        return (
-            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl border border-green-200 dark:border-green-800 text-center my-3 max-w-sm flex items-center justify-center gap-3">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-                <span className="text-sm font-bold text-green-800 dark:text-green-300">Listing Created Successfully!</span>
-            </div>
-        );
-    }
-
-    return (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg my-4 max-w-sm overflow-hidden ring-1 ring-black/5">
-            <div className="h-32 bg-gray-100 dark:bg-gray-800 relative">
-                <img 
-                    src={previewData.images?.[0] || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&q=80&w=1000'} 
-                    alt="Preview" 
-                    className="w-full h-full object-cover"
-                />
-                <div className="absolute top-3 left-3 bg-black/50 backdrop-blur px-2 py-1 rounded-md text-white text-[10px] font-bold uppercase tracking-wider">
-                    Draft Preview
-                </div>
-            </div>
-            <div className="p-5 space-y-4">
-                <div>
-                    <h3 className="font-bold text-lg text-gray-900 dark:text-white leading-tight">{previewData.title || 'New Property'}</h3>
-                    <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        <MapPin className="w-3.5 h-3.5" /> {previewData.city}, {previewData.state}
-                    </div>
-                </div>
-
-                <div className="flex gap-4 border-y border-gray-100 dark:border-gray-800 py-3">
-                    <div className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-                        <BedDouble className="w-4 h-4 text-gray-400" /> {previewData.bedrooms} Bed
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-                        <Bath className="w-4 h-4 text-gray-400" /> {previewData.bathrooms} Bath
-                    </div>
-                    <div className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-                        <Home className="w-4 h-4 text-gray-400" /> {previewData.type}
-                    </div>
-                </div>
-
-                {/* --- NEW FINANCIALS SECTION --- */}
-                {(previewData.securityDeposit || previewData.refundPolicy) && (
-                    <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg space-y-2">
-                        <div className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                            <ShieldCheck className="w-3.5 h-3.5" /> Financials
-                        </div>
-                        <div className="flex justify-between text-xs">
-                            <span className="text-gray-600 dark:text-gray-300">Security Deposit</span>
-                            <span className="font-bold text-gray-900 dark:text-white">₹{previewData.securityDeposit || 0}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                            <span className="text-gray-600 dark:text-gray-300">Refund</span>
-                            <span className="font-medium text-gray-900 dark:text-white truncate max-w-[120px]">{previewData.refundPolicy || 'Standard'}</span>
-                        </div>
-                    </div>
-                )}
-
-                <div className="flex justify-between items-end">
-                    <div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Base Price</p>
-                        <p className="text-xl font-bold text-gray-900 dark:text-white">₹{previewData.baseWeekdayPrice?.toLocaleString()}</p>
-                    </div>
-                    <button 
-                        onClick={handleCreate}
-                        disabled={status === 'creating'}
-                        className="bg-black dark:bg-white text-white dark:text-black px-6 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-opacity flex items-center gap-2"
-                    >
-                        {status === 'creating' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                        Create Listing
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Simple Markdown Renderer
 const MarkdownText: React.FC<{ text: string }> = ({ text }) => {
     return (
         <div>
@@ -283,11 +200,9 @@ const FormattedMessage = ({ text, properties, onPreview, onBook, onAction }: { t
   const segments: React.ReactNode[] = [];
   let remaining = text;
   
-  // Markers we care about
   const markers = ['[PROPERTY:', '[BOOKING_INTENT:', '[PREVIEW_LISTING:', '[ACTION:'];
   
   while (remaining.length > 0) {
-      // Find the earliest marker
       let firstMarkerIndex = -1;
       let foundMarker = '';
       
@@ -300,17 +215,14 @@ const FormattedMessage = ({ text, properties, onPreview, onBook, onAction }: { t
       }
       
       if (firstMarkerIndex === -1) {
-          // No more markers, push rest as text
           segments.push(<MarkdownText key={segments.length} text={remaining} />);
           break;
       }
       
-      // Push text before marker
       if (firstMarkerIndex > 0) {
           segments.push(<MarkdownText key={segments.length} text={remaining.substring(0, firstMarkerIndex)} />);
       }
       
-      // Extract Tag content with bracket counting
       let open = 1;
       let endIndex = -1;
       const contentStart = firstMarkerIndex + foundMarker.length;
@@ -326,11 +238,8 @@ const FormattedMessage = ({ text, properties, onPreview, onBook, onAction }: { t
       
       if (endIndex !== -1) {
           const jsonStr = remaining.substring(contentStart, endIndex).trim();
-          
           try {
-              // RENDER COMPONENTS
               if (foundMarker === '[PROPERTY:') {
-                  // Property ID handling
                   const id = jsonStr.replace(/['"]/g, ''); 
                   const prop = properties?.find(p => p.id === id);
                   if (prop) {
@@ -339,36 +248,17 @@ const FormattedMessage = ({ text, properties, onPreview, onBook, onAction }: { t
               } else if (foundMarker === '[BOOKING_INTENT:') {
                   const data = JSON.parse(jsonStr);
                   segments.push(<BookingProposalCard key={segments.length} proposal={data} onBook={onBook} properties={properties} />);
-              } else if (foundMarker === '[PREVIEW_LISTING:') {
-                  const data = JSON.parse(jsonStr);
-                  segments.push(<ListingPreviewCard key={segments.length} previewData={data} onConfirm={onAction!} />);
               } else if (foundMarker === '[ACTION:') {
                    // Hidden from UI
               }
-              
-          } catch (e) {
-               console.warn("Error parsing chat component payload", e);
-               // Fallback: render raw ID for PROPERTY tag if JSON parse failed (legacy support)
-               if (foundMarker === '[PROPERTY:') {
-                   const id = jsonStr;
-                   const prop = properties?.find(p => p.id === id);
-                   if (prop) segments.push(<ChatPropertyCard key={segments.length} property={prop} onPreview={onPreview!} />);
-               }
-          }
-          
+          } catch (e) { console.warn("Error parsing chat component payload", e); }
           remaining = remaining.substring(endIndex + 1);
       } else {
-          // Malformed tag (unbalanced), treat as text to avoid infinite loop
           segments.push(<MarkdownText key={segments.length} text={remaining.substring(firstMarkerIndex, firstMarkerIndex + foundMarker.length)} />);
           remaining = remaining.substring(firstMarkerIndex + foundMarker.length);
       }
   }
-  
-  return (
-    <div className="text-sm text-gray-800 dark:text-gray-200 space-y-2 leading-relaxed">
-      {segments}
-    </div>
-  );
+  return <div className="text-sm text-gray-800 dark:text-gray-200 space-y-2 leading-relaxed">{segments}</div>;
 };
 
 export const AIChat: React.FC<AIChatProps> = ({ 
@@ -382,16 +272,20 @@ export const AIChat: React.FC<AIChatProps> = ({
     mode = 'floating',
     userRole = UserRole.GUEST,
     userName = 'Guest',
+    userAvatar,
     isOpen: isOpenProp,
-    onToggle
+    onToggle,
+    onNavigate,
+    onToggleTheme,
+    onSwitchRole,
+    isDarkMode,
+    showMenuButton = true
 }) => {
   const [internalIsOpen, setInternalIsOpen] = useState(mode === 'fullscreen');
   const isOpen = isOpenProp !== undefined ? isOpenProp : internalIsOpen;
   
-  const toggleOpen = () => {
-      const newState = !isOpen;
-      onToggle ? onToggle(newState) : setInternalIsOpen(newState);
-  };
+  // Menu State for Fullscreen
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -434,8 +328,7 @@ export const AIChat: React.FC<AIChatProps> = ({
   };
 
   const startListening = () => {
-    // @ts-ignore
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
         recognition.lang = 'en-US';
@@ -456,21 +349,98 @@ export const AIChat: React.FC<AIChatProps> = ({
   };
 
   const suggestions = userRole === UserRole.HOST 
-    ? ["Analyze revenue", "Update pricing", "Show bookings", "Go to Dashboard"]
+    ? ["Analyze revenue", "Update pricing", "Show bookings", "Upcoming check-ins"]
     : ["Luxury villa", "Pet-friendly stays", "Weekend ideas", "Budget homes"];
+
+  const handleMenuNavigate = (page: string) => {
+      setIsMenuOpen(false);
+      if (onEnterDashboard) onEnterDashboard(); // Exit Chat Mode
+      if (onNavigate) onNavigate(page); // Go to Page
+  };
 
   // --- MINIMAL FULLSCREEN UI (Google AI Studio Style) ---
   if (mode === 'fullscreen') {
       const isZeroState = messages.length === 0;
 
+      // Define Menu Items based on Role
+      const menuItems = userRole === UserRole.HOST ? [
+        { id: 'dashboard', icon: Home, label: 'Overview' },
+        { id: 'listings', icon: List, label: 'Properties' },
+        { id: 'calendar', icon: Calendar, label: 'Calendar' },
+        { id: 'messages', icon: MessageSquare, label: 'Messages' },
+        { id: 'profile', icon: UserCircle, label: 'Profile' },
+        { id: 'settings', icon: Settings, label: 'Settings' },
+      ] : [
+        { id: 'explore', icon: Home, label: 'Explore' },
+        { id: 'trips', icon: Calendar, label: 'Trips' },
+        { id: 'messages', icon: MessageSquare, label: 'Inbox' },
+        { id: 'profile', icon: UserCircle, label: 'Profile' }
+      ];
+
       return (
           <div className="flex flex-col h-full w-full relative bg-white dark:bg-black font-sans">
-              {/* Minimal Top Bar */}
-              {onEnterDashboard && (
-                  <div className="absolute top-6 right-6 z-50">
-                      <button onClick={onEnterDashboard} className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg text-xs font-semibold text-gray-900 dark:text-white transition-colors">
-                          <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
-                      </button>
+              {/* TOP RIGHT HAMBURGER MENU */}
+              {showMenuButton && (
+                  <div className="absolute top-6 right-6 z-[2000]">
+                       <div className="relative">
+                            <button 
+                                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                className="flex items-center gap-2 p-1 pl-3 pr-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full hover:shadow-md transition-all group relative"
+                            >
+                                <Menu className="w-4 h-4 text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white" />
+                                {userAvatar ? (
+                                    <img src={userAvatar} alt="Profile" className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700" />
+                                ) : (
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 to-brand-800 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                                        {userName?.charAt(0) || 'U'}
+                                    </div>
+                                )}
+                            </button>
+    
+                            {isMenuOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-[1999]" onClick={() => setIsMenuOpen(false)}></div>
+                                    <div className="absolute top-12 right-0 w-72 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-800 overflow-hidden z-[2000] animate-fadeIn origin-top-right">
+                                        <div className="py-2">
+                                            <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800 mb-2">
+                                                <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{userName || 'User'}</p>
+                                                <p className="text-xs text-gray-500 capitalize">{userRole}</p>
+                                            </div>
+                                            {menuItems.map(item => (
+                                                <button
+                                                    key={item.id}
+                                                    onClick={() => handleMenuNavigate(item.id)}
+                                                    className="w-full text-left px-6 py-3 text-sm font-medium flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-gray-600 dark:text-gray-400"
+                                                >
+                                                    <item.icon className="w-4 h-4" />
+                                                    {item.label}
+                                                </button>
+                                            ))}
+                                            
+                                            <div className="h-px bg-gray-100 dark:bg-gray-800 my-2"></div>
+                                            
+                                            {onToggleTheme && (
+                                                <button onClick={() => { onToggleTheme(); setIsMenuOpen(false); }} className="w-full text-left px-6 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center gap-3">
+                                                    {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                                                    Appearance: {isDarkMode ? 'Dark' : 'Light'}
+                                                </button>
+                                            )}
+                                            
+                                            {onSwitchRole && (
+                                                <button onClick={() => { onSwitchRole(); setIsMenuOpen(false); }} className="w-full text-left px-6 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center gap-3">
+                                                    <RefreshCw className="w-4 h-4" /> Switch Role
+                                                </button>
+                                            )}
+    
+                                            <div className="h-px bg-gray-100 dark:bg-gray-800 my-2"></div>
+                                            <button className="w-full text-left px-6 py-3 text-sm font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-colors flex items-center gap-3">
+                                                <LogOut className="w-4 h-4" /> Logout
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                       </div>
                   </div>
               )}
 
@@ -525,7 +495,7 @@ export const AIChat: React.FC<AIChatProps> = ({
                               {suggestions.map((prompt, i) => (
                                   <button
                                     key={i}
-                                    onClick={() => prompt.includes('Dashboard') && onEnterDashboard ? onEnterDashboard() : handleSend(prompt)}
+                                    onClick={() => handleSend(prompt)}
                                     className="whitespace-nowrap px-4 py-1.5 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-800 rounded-full text-xs font-medium text-gray-600 dark:text-gray-400 transition-colors"
                                   >
                                       {prompt}
